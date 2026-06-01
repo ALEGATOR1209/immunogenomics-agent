@@ -1,0 +1,6 @@
+smolagents
+litellm
+anthropic
+gradio>=4.0
+pandas
+python-dotenv

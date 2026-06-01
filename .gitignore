@@ -1,0 +1,13 @@
+old
+.DS_Store
+.claude
+build
+dist
+*.egg-info
+__pycache__
+*.idea
+.vscode
+*.env
+*.venv
+venv/
+env/
