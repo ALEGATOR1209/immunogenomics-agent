@@ -2,3 +2,6 @@
 .claude
 data
 *.ipynb
+test/results
+test/notebooks
+test/logs
