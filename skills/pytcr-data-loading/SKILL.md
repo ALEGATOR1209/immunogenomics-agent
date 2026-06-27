@@ -180,9 +180,4 @@ MuData object with n_obs × n_vars = 10715 × 33539
 
 ## Post-importing
 
-After data imported you can suggest the user to perform visualization or quality control. `index_chains` should be called always to choose the appropriate chains for each cell. References to those chains will be stored in `adata.obsm`.
-
-```python
-ir.pp.index_chains(mdata)
-ir.tl.chain_qc(mdata)
-```
+When you've finished, propose the user to run pytcr-preprocessing skill.
