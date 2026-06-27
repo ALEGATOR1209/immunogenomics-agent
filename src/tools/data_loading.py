@@ -49,9 +49,10 @@ def _build_column_map(columns: list[str]) -> tuple[dict[str, str], list[str]]:
     return rename, missing
 
 
-def load_pytcr_file(path: Path) -> tuple[pd.DataFrame, str]:
+def load_pytcr_file(path: Path, sample_name: str | None = None) -> tuple[pd.DataFrame, str]:
     """
     Load a repertoire file and remap columns to pyTCR standard.
+    If the file has no sample column and sample_name is provided, it is injected.
     Returns (dataframe, summary_text).
     """
     sep = _detect_separator(path)
@@ -60,8 +61,43 @@ def load_pytcr_file(path: Path) -> tuple[pd.DataFrame, str]:
     rename_map, unmapped = _build_column_map(df.columns.tolist())
     df = df.rename(columns=rename_map)
 
+    if "sample" not in df.columns and sample_name:
+        df.insert(0, "sample", sample_name)
+        unmapped = [c for c in unmapped if c != "sample"]
+
     summary = _build_summary(df, path.name, rename_map, unmapped)
     return df, summary
+
+
+def combine_files(paths: list[Path]) -> tuple[pd.DataFrame, str]:
+    """Load and concatenate multiple repertoire files into one dataset."""
+    frames: list[pd.DataFrame] = []
+    per_file: list[str] = []
+
+    for path in paths:
+        df, summary = load_pytcr_file(path, sample_name=path.stem)
+        frames.append(df)
+        per_file.append(summary)
+
+    combined = pd.concat(frames, ignore_index=True)
+
+    lines = [
+        f"**{len(paths)} files** combined into one dataset.\n",
+        f"- Total clonotypes: {len(combined):,}",
+    ]
+    if "sample" in combined.columns:
+        samples = combined["sample"].nunique()
+        lines.append(f"- Unique samples: {samples}")
+    if "#count" in combined.columns:
+        lines.append(f"- Total reads: {int(combined['#count'].sum()):,}")
+    if "cdr3aa" in combined.columns:
+        lengths = combined["cdr3aa"].dropna().str.len()
+        lines.append(f"- CDR3aa length: {int(lengths.min())}–{int(lengths.max())} aa")
+
+    lines.append("\n---\n")
+    lines.extend(per_file)
+
+    return combined, "\n".join(lines)
 
 
 def _build_summary(
