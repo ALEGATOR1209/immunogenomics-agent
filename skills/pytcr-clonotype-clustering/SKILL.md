@@ -112,9 +112,11 @@ ir.pp.ir_dist(
 )
 ```
 
-`metric="tcrdist"` uses the BLOSUM62 substitution matrix (Dash et al.). `cutoff=15` means cells with CDR3 distance ≤ 15 are considered similar — roughly equivalent to ~1–2 conservative amino-acid substitutions. Adjust `cutoff` based on how strictly you want to define similarity; lower values = tighter clusters.
+`metric="tcrdist"` uses the [BLOSUM62](https://en.wikipedia.org/wiki/BLOSUM) substitution matrix, following the approach proposed by Dash et al. (based on the `tcrdist3` implementation). `cutoff=15` means cells with CDR3 distance ≤ 15 are considered similar — for reference, a distance of `12` is equivalent to two `R`s mutating into `K`s under the default parameters. Adjust `cutoff` based on how strictly you want to define similarity; lower values = tighter clusters.
 
-Alternatively, use `base_matrix="tcrblosum"` for TCRBLOSUM alpha/beta-specific substitution matrices.
+Alternatively, use `base_matrix="tcrblosum"` for [TCRBLOSUM](https://doi.org/10.1093/bib/bbae602) alpha/beta-specific substitution matrices.
+
+Cells are connected in the network when their CDR3 sequence distance is at or below `cutoff`. With `receptor_arms="all", dual_ir="any"`, this must hold for both receptor arms (VJ and VDJ chains), considering any possible dual immune receptor chain pairing.
 
 ### 4b. Define clonotype clusters
 
@@ -146,7 +148,33 @@ ir.tl.clonotype_network(mdata, min_cells=3, sequence="aa", metric="tcrdist")
 _ = ir.pl.clonotype_network(mdata, color="<color_col>", base_size=20, label_fontsize=9, panel_size=(7, 7))
 ```
 
-Nodes now represent unique receptor configurations; connected subgraphs are clonotype clusters. Nodes within the same subgraph have CDR3 distances ≤ `cutoff`.
+Nodes now represent unique receptor configurations; connected subgraphs are clonotype clusters. Nodes within the same subgraph have CDR3 distances ≤ `cutoff`. Compared to the nucleotide-identity network (Step 3), you should now see several connected dots — each fully connected subnetwork is a clonotype cluster, while each individual dot still represents cells with identical receptor configurations.
+
+Coloring by a patient/sample column (e.g. `color="gex:patient"`) lets you distinguish **private** clonotype clusters (cells from a single patient only) from **public** ones (shared across patients) — public clusters are of particular interest since they suggest convergent recognition of the same antigen.
+
+### 4e. Extract CDR3 sequences from a specific cluster
+
+To inspect the receptor configurations that make up one clonotype cluster, use `ir.get.airr_context` to temporarily attach AIRR columns to `mdata.obs`, then subset and group. Replace `"159"` with the cluster label of interest:
+
+```python
+with ir.get.airr_context(mdata, "junction_aa", ["VJ_1", "VDJ_1", "VJ_2", "VDJ_2"]):
+    cdr3_ct = (
+        mdata.obs.loc[lambda x: x["airr:cc_aa_tcrdist"] == "159"]
+        .astype(str)  # works around a pandas dropna=False bug on some versions
+        .groupby(
+            ["VJ_1_junction_aa", "VDJ_1_junction_aa", "VJ_2_junction_aa", "VDJ_2_junction_aa", "airr:receptor_subtype"],
+            observed=True,
+            dropna=False,
+        )
+        .size()
+        .reset_index(name="n_cells")
+    )
+cdr3_ct
+```
+
+Each row is one distinct receptor configuration within the cluster, with its cell count — corresponding to the individual dots in the network plot.
+
+> Since scirpy v0.13, AIRR data is not included in `mdata.obs` by default. Use `ir.get.airr` for a per-cell AIRR data frame, or `ir.get.airr_context` (as above) to temporarily add columns to `obs`.
 
 ---
 
@@ -177,6 +205,22 @@ ct_different_v = (
     .apply(lambda x: x["airr:cc_aa_tcrdist_same_v"].nunique() > 1)
 )
 ct_different_v[ct_different_v].index.tolist()
+```
+
+For example, a cluster labeled `280` might split into `(280, 788)` once `same_v_gene=True` is enforced — the two resulting sub-clusters share CDR3 similarity but use different V genes. Inspect the actual V calls behind a split using `ir.get.airr_context`:
+
+```python
+with ir.get.airr_context(mdata, "v_call", ["VJ_1", "VDJ_1"]):
+    ct_different_v_df = (
+        mdata.obs.loc[
+            lambda x: x["airr:cc_aa_tcrdist"].isin(ct_different_v),
+            ["airr:cc_aa_tcrdist", "airr:cc_aa_tcrdist_same_v", "VJ_1_v_call", "VDJ_1_v_call"],
+        ]
+        .sort_values("airr:cc_aa_tcrdist")
+        .drop_duplicates()
+        .reset_index(drop=True)
+    )
+ct_different_v_df
 ```
 
 ---
