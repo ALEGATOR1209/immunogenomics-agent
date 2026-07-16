@@ -1,0 +1,29 @@
+services:
+  agent:
+    build:
+      context: .
+    image: pytcr-agent:latest
+    container_name: pytcr-agent
+    # No host mounts at all - not even read-only ones. The model itself
+    # (native `ollama serve`, Metal-accelerated) is reached over the
+    # network via host.docker.internal, so there's nothing to bind-mount.
+    volumes:
+      - agent_state:/root
+    # --- isolation hardening (see docker-agent/README.md for what's
+    # verified vs not) ---
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    # NOT read-only: opencode's TUI crashes with "Effect.tryPromise /
+    # Unexpected error" under a read-only rootfs (reproduced with cap_drop,
+    # no-new-privileges, and a fresh state volume all still in place - only
+    # removing read_only fixes it). strace didn't surface a single clearly
+    # causal syscall failure, so the exact write path is unconfirmed - the
+    # tradeoff taken here is losing "can't persist changes to the image"
+    # rather than shipping a broken container.
+    mem_limit: "2gb"
+    restart: unless-stopped
+
+volumes:
+  agent_state:

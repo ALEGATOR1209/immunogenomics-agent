@@ -1,0 +1,31 @@
+# Opt-in override that adds NVIDIA GPU passthrough. Only usable on Linux
+# (bare metal or WSL2) with an NVIDIA GPU, the driver, and
+# nvidia-container-toolkit installed - see:
+# https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html
+#
+# Not usable on macOS: Docker Desktop there has no GPU passthrough into
+# containers at all (see docker/README.md's Performance section).
+#
+# `setup.sh` detects an NVIDIA GPU automatically and layers this in. To
+# apply it manually instead:
+#   docker compose -f docker/docker-compose.yml -f docker/docker-compose.gpu.yml up -d --build
+#
+# NOTE: unverified on real GPU hardware - this machine only has a Mac to
+# test on. The `deploy.resources.reservations.devices` block below is
+# Docker's currently-documented way to request GPU access from plain
+# `docker compose up` (no Swarm needed), and should coexist fine with the
+# `cap_drop: [ALL]` hardening in the base compose file since NVIDIA's
+# container runtime grants GPU access via device nodes + injected
+# libraries, not elevated capabilities - but that's a documented
+# expectation, not something tested end-to-end here. If `docker exec
+# pytcr-ollama nvidia-smi` doesn't work after starting, that's the first
+# thing to debug.
+services:
+  ollama:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

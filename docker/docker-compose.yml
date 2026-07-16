@@ -1,0 +1,40 @@
+services:
+  ollama:
+    build:
+      context: .
+    image: pytcr-ollama:latest
+    container_name: pytcr-ollama
+    ports:
+      # host:container - 11434 and 11435 are already taken on this machine
+      # (native `ollama serve` and "crocodesktop" respectively), so the
+      # container is exposed on 11436 instead. Change the left-hand side
+      # if that clashes with something on your setup.
+      - "11436:11434"
+    volumes:
+      # Read-only: reuse the host's already-pulled models (qwen3.6, qwen3.5, ...)
+      # instead of re-downloading/rebuilding them inside the container.
+      # This is the ONLY host path the container can see.
+      - ${HOME}/.ollama/models:/root/.ollama/models:ro
+      # Ephemeral, container-only scratch space (not backed by any host
+      # directory) for the parts of ~/.ollama that Ollama needs to write
+      # to (config.json, keypair, logs) — thrown away on container removal.
+      - ollama_state:/root/.ollama
+    tmpfs:
+      - /tmp
+    # --- isolation hardening ---
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    mem_limit: "${MEM_LIMIT_GB:-24}gb"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  ollama_state:
