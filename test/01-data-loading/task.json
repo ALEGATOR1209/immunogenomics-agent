@@ -1,0 +1,31 @@
+{
+  "grader": {
+    "config": {
+      "ground_truth": {
+        "n_cells": 20857,
+        "n_tcr": 2186,
+        "nc_gene_id": "nCov",
+        "fst_gene_id": "A1BG",
+        "airr_cell": "AAACCTGAGCTGCAAG-1"
+      },
+      "tolerances": {
+        "n_cells": {
+          "type": "absolute",
+          "value": 0
+        },
+        "n_tcr": {
+          "type": "absolute",
+          "value": 0
+        }
+      }
+    },
+    "type": "numeric_tolerance"
+  },
+  "id": "10x-data-loading-scirpy-tutorial",
+  "metadata": {
+    "eval_type": "scientific",
+    "kit": "scirpy",
+    "task": "data-loading"
+  },
+  "task": "There is a 10x-genomics data with RNA-seq (feature bc matrix) and TCR-seq (contig annotations) data. Output the total number of cells in the sample, number of cells with TCR repertoires data. Look at gene names and find a record with a name that is non-conventional (probably not a gene at all) and is different from all others. Sort genes (not ids) ascending and find the first gene name. Look at available TCR-seq data, sort cell ids ascending and find the first cell id."
+}
