@@ -1,0 +1,38 @@
+{
+  "grader": {
+    "config": {
+      "ground_truth": {
+        "n_single_pair": 1370,
+        "n_total": 1552,
+        "n_clonotypes": 1088,
+        "max_clonotype": 25
+      },
+      "tolerances": {
+        "n_single_pair": {
+          "type": "absolute",
+          "value": 0
+        },
+        "n_tcr": {
+          "type": "absolute",
+          "value": 0
+        },
+        "n_clonotypes": {
+          "type": "absolute",
+          "value": 100
+        },
+        "max_clonotype": {
+          "type": "absolute",
+          "value": 5
+        }
+      }
+    },
+    "type": "numeric_tolerance"
+  },
+  "id": "10x-clonotype-analysis-scirpy-tutorial",
+  "metadata": {
+    "eval_type": "scientific",
+    "kit": "scirpy",
+    "task": "clonotype-analysis"
+  },
+  "task": "There is a 10x-genomics data with RNA-seq (feature bc matrix) and TCR-seq (contig annotations) data. Load the data, perform preprocessing and quality control. Filter our orphant chains and samples without TCR data. Find the remaining number of samples that has a single pair for chain pairing. Find the total number of remaining samples. Define clonotypes. Find the total number of identified clonotypes. Find the size of the largest clonotype."
+}

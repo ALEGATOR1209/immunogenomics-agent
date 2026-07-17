@@ -1,0 +1,15 @@
+name: pytcr
+channels:
+  - bioconda
+  - conda-forge
+dependencies:
+  - anndata
+  - ipykernel
+  - jupyter
+  - muon
+  - numpy
+  - python=3.10
+  - scanpy
+  - scirpy
+  - pip:
+    - setuptools==81.0.0

@@ -78,6 +78,20 @@ Add an entry per model you want available, then rebuild
 (`docker compose -f docker-agent/docker-compose.yml up -d --build`). Models
 are referenced as `host/<name>`, matching the provider name.
 
+**Context window note:** Ollama defaults a model's loaded context window to
+32768 tokens regardless of what the model architecture actually supports
+(qwen3.6's Modelfile advertises up to 262144) — visible via `ollama ps`'s
+`CONTEXT` column, and as the `-c` flag on the underlying `llama-server`
+process (`ps aux | grep llama-server`). Multi-step agentic tasks that
+inspect real data can exhaust 32768 tokens of cumulative tool-call history
+before finishing, with no error — the model just silently stops producing
+useful output once the context fills. `qwen3.6-128k` above is a derived
+model (`ollama create qwen3.6-128k -f Modelfile` with `FROM qwen3.6:latest` +
+`PARAMETER num_ctx 131072`) for exactly this case — same weights, no
+re-download, only the loaded context window differs. Memory cost is small
+(measured ~1GB extra RSS for 4x the context here). Use `host/qwen3.6-128k`
+instead of `host/qwen3.6` for anything involving nontrivial tool use.
+
 `host.docker.internal` is Docker's standard container→host DNS name and
 works out of the box on Docker Desktop (macOS, Windows/WSL2). On Linux you
 may need `--add-host=host.docker.internal:host-gateway`, already set for

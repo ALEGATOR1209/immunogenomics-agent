@@ -7,6 +7,7 @@
       "options": { "baseURL": "http://host.docker.internal:11434/v1" },
       "models": {
         "qwen3.6": { "name": "qwen3.6-35b" },
+        "qwen3.6-128k": { "name": "qwen3.6-35b (128k context)" },
         "qwen3.5": { "name": "qwen3.5" }
       }
     }

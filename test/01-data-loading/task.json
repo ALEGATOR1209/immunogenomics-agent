@@ -4,7 +4,7 @@
       "ground_truth": {
         "n_cells": 20857,
         "n_tcr": 2186,
-        "nc_gene_id": "nCov",
+        "nc_gene_id": "nCoV",
         "fst_gene_id": "A1BG",
         "airr_cell": "AAACCTGAGCTGCAAG-1"
       },

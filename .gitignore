@@ -5,3 +5,4 @@ data
 test/results
 test/notebooks
 test/logs
+test/*/runs

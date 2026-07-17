@@ -1,0 +1,4 @@
+**/data
+**/runs
+**/*.ipynb
+**/__pycache__
