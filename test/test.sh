@@ -5,10 +5,13 @@
 #   ./test <task-dir-name> [--skills]
 #   MODEL=host/qwen3.5 ./test 01-data-loading --skills
 #
-# --skills: bind-mounts the project's .claude/skills (read-only) into the
+# --skills: bind-mounts the project's skills/ (read-only) into the
 #           container at /root/.claude/skills, which is opencode's
 #           "external skills (auto-loaded)" location - no opencode.json
-#           config needed, the agent's Skill tool just sees them.
+#           config needed, the agent's Skill tool just sees them. Sourced
+#           from skills/, not .claude/skills/ - the latter is gitignored
+#           (just a local symlink to skills/) and won't exist on a fresh
+#           clone or CI.
 #
 # Default model is qwen3.6-128k, not qwen3.6: Ollama loads qwen3.6 with only
 # a 32768-token context by default (see docker-agent/README.md's "Context
@@ -42,7 +45,7 @@ done
 TASK_DIR="$SCRIPT_DIR/$TASK_NAME"
 
 if (( USE_SKILLS )); then
-  [[ -d "$REPO_ROOT/.claude/skills" ]] || die "--skills was passed but $REPO_ROOT/.claude/skills doesn't exist"
+  [[ -d "$REPO_ROOT/skills" ]] || die "--skills was passed but $REPO_ROOT/skills doesn't exist"
 fi
 
 [[ -d "$TASK_DIR" ]] || die "No such task directory: $TASK_DIR"
@@ -119,7 +122,7 @@ PRETTY_FILE="$RUN_DIR/run.txt"
 {
   echo "=== Task: $TASK_NAME ==="
   echo "=== Model: $MODEL ==="
-  echo "=== Skills: $([[ $USE_SKILLS -eq 1 ]] && echo "enabled ($REPO_ROOT/.claude/skills)" || echo "disabled") ==="
+  echo "=== Skills: $([[ $USE_SKILLS -eq 1 ]] && echo "enabled ($REPO_ROOT/skills)" || echo "disabled") ==="
   echo "=== Prompt: ==="
   echo "$PROMPT"
   echo
@@ -127,7 +130,7 @@ PRETTY_FILE="$RUN_DIR/run.txt"
 
 SKILLS_MOUNT_ARGS=()
 if (( USE_SKILLS )); then
-  SKILLS_MOUNT_ARGS=(-v "$REPO_ROOT/.claude/skills:/root/.claude/skills:ro")
+  SKILLS_MOUNT_ARGS=(-v "$REPO_ROOT/skills:/root/.claude/skills:ro")
 fi
 
 START_TIME=$(date +%s)
