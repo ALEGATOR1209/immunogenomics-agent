@@ -12,13 +12,13 @@
           "type": "absolute",
           "value": 0
         },
-        "n_tcr": {
+        "n_total": {
           "type": "absolute",
-          "value": 0
+          "value": 100
         },
         "n_clonotypes": {
           "type": "absolute",
-          "value": 100
+          "value": 150
         },
         "max_clonotype": {
           "type": "absolute",
@@ -34,5 +34,5 @@
     "kit": "scirpy",
     "task": "clonotype-analysis"
   },
-  "task": "There is a 10x-genomics data with RNA-seq (feature bc matrix) and TCR-seq (contig annotations) data. Load the data, perform preprocessing and quality control. Filter our orphant chains and samples without TCR data. Find the remaining number of samples that has a single pair for chain pairing. Find the total number of remaining samples. Define clonotypes. Find the total number of identified clonotypes. Find the size of the largest clonotype."
+  "task": "There is a 10x-genomics single cell CellRanger data with RNA-seq (feature bc matrix) and TCR-seq (contig annotations) data. Load the data, perform preprocessing and quality control. You can filter cells and genes with thresholds you see fit or not at all. Filter our orphant chains and samples without TCR data. Find the remaining number of cells that has a single pair for chain pairing. Find the total number of remaining cells. Define clonotypes. Find the total number of identified clonotypes. Find the size of the largest clonotype."
 }

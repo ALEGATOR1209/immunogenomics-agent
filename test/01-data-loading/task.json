@@ -27,5 +27,5 @@
     "kit": "scirpy",
     "task": "data-loading"
   },
-  "task": "There is a 10x-genomics data with RNA-seq (feature bc matrix) and TCR-seq (contig annotations) data. Output the total number of cells in the sample, number of cells with TCR repertoires data. Look at gene names and find a record with a name that is non-conventional (probably not a gene at all) and is different from all others. Sort genes (not ids) ascending and find the first gene name. Look at available TCR-seq data, sort cell ids ascending and find the first cell id."
+  "task": "There is a 10x-genomics single cell CellRanger data with RNA-seq (feature bc matrix) and TCR-seq (contig annotations) data. Output the total number of cells in the sample, number of cells with TCR repertoires data. Look at gene names and find a record with a name that is non-conventional (probably not a gene at all) and is different from all others. Sort genes (not ids) ascending and find the first gene name. Look at available TCR-seq data, sort cell ids ascending and find the first cell id."
 }
