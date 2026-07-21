@@ -4,11 +4,11 @@ This file provides guidance when working with code in this repository.
 
 ## What this repository is
 
-This is a **skills-and-infrastructure repo** for AIRR-seq analysis, plus a small harness for benchmarking AI coding agents (opencode, running local Ollama models) against these skills. There is no application code to build — the deliverables are Claude/opencode-compatible skill files, Docker isolation setups, and a bash-driven eval harness. Three independent parts:
+This is a **skills-and-infrastructure repo** for AIRR-seq analysis, plus a small harness for benchmarking AI coding agents (opencode, running local Ollama models) against these skills. There is no application code to build — the deliverables are Claude/opencode-compatible skill files, Docker isolation setups, and a Python-driven eval harness. Three independent parts:
 
 1. **`skills/`** — Claude Code / opencode skills for TCR-seq analysis (symlinked into `.claude/skills/`, which is gitignored — `skills/` is the single source of truth).
 2. **`docker/` and `docker-agent/`** — two different sandboxed containers for running an LLM agent, built for different tradeoffs (see below).
-3. **`test/`** — a bash harness that runs opencode inside a container against a fixed task + dataset and grades the output.
+3. **`test/`** — a harness that runs opencode inside a container against a fixed task + dataset and grades the output.
 
 ## Architecture: two independent skill families
 
@@ -40,18 +40,20 @@ Both live at the repo root, both run opencode in a hardened container (`cap_drop
 - Ollama loads a model with only a **32768-token context by default**, regardless of what the model architecture supports — invisible until a multi-step agent task exhausts it and the model silently stops producing output (no error). Fix used here: a derived model (`ollama create <name> -f Modelfile` with `PARAMETER num_ctx N`), not a global Ollama config change.
 - A **read-only root filesystem breaks opencode's TUI** (`Effect.tryPromise` / "Unexpected error") — reproduced and isolated to `read_only: true` specifically, independent of `cap_drop`/`no-new-privileges`/volume state. `docker-agent/docker-compose.yml` intentionally does not set it; see its README for the tradeoff.
 - Headless/non-interactive opencode runs need `--dangerously-skip-permissions` (not `--auto` — that flag doesn't exist despite what `--help` might suggest from a different opencode version) or they hang waiting for a permission prompt that never comes.
-- opencode auto-loads Claude Code-format skills from `~/.claude/skills/<name>/SKILL.md` — the container's **home directory**, not the project-relative `.claude/skills` Claude Code itself uses. `test/test.sh --skills` mounts the project's `.claude/skills` there.
+- opencode auto-loads Claude Code-format skills from `~/.claude/skills/<name>/SKILL.md` — the container's **home directory**, not the project-relative `.claude/skills` Claude Code itself uses. `test/test.py --skills` mounts the project's `.claude/skills` there.
 - Docker's `internal: true` network mode blocks `host.docker.internal` too, not just the wider internet — evaluated and rejected as an egress-restriction mechanism for `docker-agent/` (see its README's "Known limitation").
 
 ## Architecture: the eval harness (`test/`)
 
-`test/test.sh <task-dir-name> [--skills]` — run from inside `test/` — is the whole harness. It is deliberately a single bash script, not a package; keep changes in that style.
+`test/test.py <task-dir-name> [--skills] [--timeout MINUTES] [--n COUNT]` — run from inside `test/` — is the whole harness. It is deliberately a single Python script, not a package; keep changes in that style.
 
 Per invocation: builds `pytcr-agent:latest` (once, cached), generates/reuses `<task-dir>/Dockerfile` (extends `pytcr-agent:latest` with a Miniforge/mamba env from `test/environment.yml` — mamba specifically, because plain conda is too slow resolving the bioconda/conda-forge scanpy+scirpy stack), renders `test/SYSTEM.md`'s `<TASK>`/`<OUTPUT_FORMAT>` placeholders from the task's `task.json` (`render_prompt.py` — `<OUTPUT_FORMAT>` is `ground_truth` with every value masked to its zero-equivalent, so the agent sees the required JSON shape but never the answers), runs opencode non-interactively inside a fresh container (`--rm`, brand new every run — no state carries over), extracts `task.ipynb`/`output.json` into `runs/<timestamp>/outputs/`, then grades against `task.json`'s `grader.config` via `grade.py` into `runs/<timestamp>/eval_result.json`.
 
+`--timeout` (default 20 minutes) stops the container if the agent hasn't finished in time; `--n` (default 1) repeats the run that many times, each as its own `runs/<timestamp>_<i>/` directory. Both a timeout and a Ctrl-C stop the in-flight container and still extract/grade whatever `task.ipynb`/`output.json` exists at that point — `eval_result.json` gets `timed_out`/`interrupted` boolean fields marking which (if either) happened; a Ctrl-C also skips any remaining `--n` iterations and exits with status 130.
+
 Task directory shape (`test/<NN-name>/`): `task.json` (id, task prompt, `grader.config.{ground_truth,tolerances}`, `metadata`), `data/` (**not git-tracked** — supply separately, `.gitignore` excludes `data`), and a generated `Dockerfile`. `grade.py`'s tolerance check supports `{"type": "absolute", "value": N}` per numeric field; fields without a tolerance entry are compared as exact string match, case-insensitive.
 
-Default model is `host/qwen3.6-128k` (not `host/qwen3.6` — see the context-window gotcha above); override per-run with `MODEL=... ./test.sh ...`. `runs/`, `test/logs`, `test/notebooks`, `test/results`, and all `*.ipynb` are gitignored — they're local run history/scratch, not source.
+Default model is `host/glm-4.7-flash-128k` (not `host/glm-4.7-flash` — see the context-window gotcha above; switched from `host/qwen3.6-128k` after repeated runs surfaced a qwen3.6-specific chat-template bug where the reasoning channel leaks raw `<|mask_start|>`/`<|mask_end|>` tokens and the turn terminates early, mid-task, with no error); override per-run with `MODEL=... ./test.py ...`. `runs/`, `test/logs`, `test/notebooks`, `test/results`, and all `*.ipynb` are gitignored — they're local run history/scratch, not source.
 
 ## Common commands
 
@@ -66,10 +68,11 @@ Default model is `host/qwen3.6-128k` (not `host/qwen3.6` — see the context-win
 
 # Eval harness (run from inside test/)
 cd test
-./test.sh 01-data-loading                  # no skills mounted
-./test.sh 01-data-loading --skills         # mounts .claude/skills into the container
-MODEL=host/qwen3.5 ./test.sh 01-data-loading
+./test.py 01-data-loading                  # no skills mounted
+./test.py 01-data-loading --skills         # mounts .claude/skills into the container
+./test.py 01-data-loading --timeout 30 --n 3   # 30-minute timeout, 3 repeated runs
+MODEL=host/qwen3.5 ./test.py 01-data-loading
 python3 grade.py <task.json> <output.json> [duration_seconds] [skills]   # re-grade a saved answer
 ```
 
-No lint/test suite, package manager, or build step exists for this repo — the "tests" are the eval tasks under `test/`, run via `test.sh` above, not a conventional test runner.
+No lint/test suite, package manager, or build step exists for this repo — the "tests" are the eval tasks under `test/`, run via `test.py` above, not a conventional test runner.

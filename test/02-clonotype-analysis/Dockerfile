@@ -3,9 +3,11 @@ FROM ${BASE_IMAGE}
 
 # Miniforge (conda + mamba, conda-forge-first): mamba resolves the
 # bioconda/conda-forge scanpy+scirpy stack far faster and more reliably
-# than the classic conda solver.
+# than the classic conda solver. gzip: task data ships as .csv.gz/.mtx.gz -
+# guaranteed here rather than left to whatever the base image happens to
+# bundle, so the agent never has to install it itself mid-task.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends wget bzip2 ca-certificates \
+    && apt-get install -y --no-install-recommends wget bzip2 gzip ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
     && wget -qO /tmp/miniforge.sh "https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-$(uname -m).sh" \
     && bash /tmp/miniforge.sh -b -p /opt/conda \

@@ -7,6 +7,8 @@ description: Preprocess and quality-control AIRR (TCR/BCR) data in a scirpy MuDa
 
 Run this after loading AIRR data (see `pytcr-data-loading` skill). These steps must be completed before any clonotype analysis.
 
+> If `mdata` also has a `gex` (transcriptomics) modality, this skill only covers the `airr` side. QC, normalization, and feature selection of the scRNA-seq data itself is a separate concern — use the `pytcr-sc-rnaseq-preprocessing` skill for that (independent of this one, can run before/after/in parallel).
+
 ## Setup
 
 ```python
@@ -52,6 +54,9 @@ This adds three columns to `mdata.obs`:
 | `extra VDJ` | Full pair + an additional VDJ chain |
 | `two full chains` | Two complete pairs (dual IR cell) |
 | `multichain` | More than two pairs — almost certainly a doublet |
+| `no IR` | Zero valid chains — e.g. a cell present via the `gex` modality (or otherwise in the merged object) with no productive VJ or VDJ chain at all. A question about "cells with no IR" is answered directly by this value (`chain_pairing == "no IR"`) — no need to compute it indirectly via a GEX-vs-AIRR barcode set difference. |
+
+> **Pitfall: `chain_pairing` vs. `receptor_subtype` are not interchangeable.** `receptor_subtype` (`TRA+TRB`, etc.) only records which chain *types* are present on a cell — it says nothing about how many of each. A cell with an extra VJ or VDJ chain (`chain_pairing == "extra VJ"` / `"extra VDJ"`) or even two full pairs (`"two full chains"`) still shows `receptor_subtype == "TRA+TRB"`, identical to a clean single-pair cell. When a question is about pair *cardinality* — "cells with a single TCR chain pair", "cells with more than one pair of TCRs" — always answer it from `chain_pairing`, never from `receptor_subtype`. Reach for `receptor_subtype` only when the question is genuinely about chain *composition* (e.g. distinguishing TRA+TRB from TRG+TRD cells).
 
 ### Visualize the distribution
 

@@ -49,6 +49,31 @@ adata = sc.read_10x_h5("example_data/liao-2019-covid19/GSM4339772_C144_filtered_
 adata.var_names_make_unique()
 ```
 
+### Loading GEX data from a 10x mtx directory (not h5)
+
+If transcriptomics data is provided as a `matrix.mtx` + `barcodes.tsv` + `genes.tsv`/`features.tsv` triplet instead of a single `.h5`, use `sc.read_10x_mtx` and point it at the directory containing the triplet:
+
+```python
+adata = sc.read_10x_mtx(
+    "<sample_dir>",
+    var_names="gene_symbols",
+)
+```
+
+- If the three files share a non-standard prefix (e.g. `<prefix>.matrix.mtx`, `<prefix>.barcodes.tsv`, `<prefix>.genes.tsv` all in the same directory, rather than the bare `matrix.mtx`/`barcodes.tsv`/`genes.tsv` names), pass that shared prefix via `prefix=`:
+
+```python
+adata = sc.read_10x_mtx(
+    "<sample_dir>",
+    var_names="gene_symbols",
+    prefix="<prefix>.",
+)
+```
+
+- `sc.read_10x_mtx` accepts the triplet whether the files are gzip-compressed (`matrix.mtx.gz`, etc.) or already unarchived (plain `matrix.mtx`) — no need to gunzip/gzip files to match a particular expectation, and it's fine if both compressed and uncompressed copies sit in the same directory (it picks the pair it needs).
+- `gex_only=True` (the default) keeps only 'Gene Expression' features and drops other feature types (e.g. 'Antibody Capture'); set `gex_only=False` to keep them.
+- **Pitfall: legacy 2-column `genes.tsv` (CellRanger v2 format — no `Type` column, just gene ID + gene name) fails to load through the gzip-compressed path.** If you hit an error reading a `.genes.tsv.gz`/`.features.tsv.gz` file that has only 2 columns, gunzip the triplet first (`gunzip -k *.gz` in the sample directory, or copy+gunzip into a scratch directory) and point `sc.read_10x_mtx` at the uncompressed files — the uncompressed-file code path tolerates the legacy 2-column format where the gzip path does not. No need to fabricate a `Type` column or symlink to standard names; unzipping alone is sufficient.
+
 ### Loading TraCeR data
 
 Here's an example of loading TraCeR data - a method commonly used to extract TCR sequences from data generated with Smart-seq2 or other full-length single-cell sequencing protocols. First, we load the transcriptomics data from the counts.tsv file:
@@ -146,25 +171,33 @@ adata_tcr = ir.io.from_airr_cells(tcr_cells)
 
 ## Data integration
 
-If transcriptomics data available, they can be integrated with AIRR data into a single MuData object. By convention, gene expression data should be stored in the gex modality, immune receptor data in the airr modality.
+**If transcriptomics (GEX) data is provided alongside AIRR data, merge them into a single MuData object — do this even if the task at hand only asks about receptor-level metrics.** By convention, gene expression data should be stored in the gex modality, immune receptor data in the airr modality.
 
 ```python
 mdata = mu.MuData({"gex": adata, "airr": adata_tcr})
 ```
 
+Skipping the merge and working from the AIRR AnnData alone silently changes the cell universe for every downstream count: a 10x contig-annotations file only lists barcodes that had at least one contig, so cells with **zero** TCR reads (a real, common population when GEX is available) don't exist in that universe at all. Metrics like "cells with no IR" mean something different — and are much smaller — when computed only within AIRR-derived cells than when computed against the full GEX+AIRR cell set. Merge first; subset to airr-only later if a specific question turns out not to need GEX.
+
 ## Combining multiple samples
 
-If the sequencing data are split into multiple samples, load each sample and then concat them:
+If the sequencing data are split into multiple samples, build one `MuData` per sample first, then concatenate the `MuData` objects — do not concatenate the `gex` and `airr` `AnnData` lists separately and combine afterward. Raw 10x barcodes (e.g. `AAACCTGAGACCTTTG-1`) are drawn from a shared whitelist and are commonly **not unique across samples**; within a single sample, `gex` and `airr` barcodes already match exactly, so building `MuData` per-sample sidesteps barcode collisions entirely. Concatenating each modality independently risks the two `index_unique` suffixes drifting out of sync between `gex` and `airr`, which silently breaks obs-name alignment (e.g. `gex` ends up with `..._0` suffixes while `airr` doesn't, so `mdata.n_obs` becomes the disjoint union instead of the intended per-cell match) — a bug that's expensive to notice after the fact.
 
 ```python
-# Merge anndata objects
-adata_gex = anndata.concat(adatas_gex, index_unique="_")
-adata_tcr = anndata.concat(adatas_tcr, index_unique="_")
-mdata = mu.MuData({"gex": adata_gex, "airr": adata_tcr})
+from mudata import concat
 
-# Set global metadata on `mdata.obs`
-mdata.obs["sample"] = mdata.obs_names.to_series().str.split("_", expand=True)[1]
-mdata.obs["group"] = mdata.obs["sample"].map(lambda x: samples[x]["group"])
+# One MuData per sample — gex and airr barcodes already align within a sample
+mdatas = {}
+for name, sample in samples.items():
+    adata_gex = sc.read_10x_mtx(sample["gex_path"], var_names="gene_symbols")
+    adata_tcr = ir.io.read_10x_vdj(sample["tcr_path"])
+    m = mu.MuData({"gex": adata_gex, "airr": adata_tcr})
+    m.obs["sample"] = name
+    m.obs["group"] = sample["group"]
+    mdatas[name] = m
+
+# Concatenate the per-sample MuData objects — keeps gex/airr suffixing in sync
+mdata = concat(mdatas, index_unique="-")
 ```
 
 `mdata` should look like this:

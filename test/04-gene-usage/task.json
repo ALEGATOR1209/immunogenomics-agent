@@ -1,0 +1,55 @@
+{
+  "grader": {
+    "config": {
+      "ground_truth": {
+        "cells_multiple_tcr": 0.06,
+        "n_cells_single_pair": 4406,
+        "n_cells_no_ir": 267,
+        "largest_network": 243,
+        "more_clonotypes": "LT5",
+        "more_expanded": "LN5",
+        "more_between_2_5": "LN5",
+        "ln5_alpha_diversity": 0.894,
+        "convergent_clonotypes": 202
+      },
+      "tolerances": {
+        "cells_multiple_tcr": {
+          "type": "absolute",
+          "value": 0.03
+        },
+        "n_cells_single_pair": {
+          "type": "absolute",
+          "value": 100
+        },
+        "n_cells_no_ir": {
+          "type": "absolute",
+          "value": 10
+        },
+        "max_clonotype": {
+          "type": "absolute",
+          "value": 5
+        },
+        "largest_network": {
+          "type": "absolute",
+          "value": 20
+        },
+        "ln5_alpha_diversity": {
+          "type": "absolute",
+          "value": 0.01
+        },
+        "convergent_clonotypes": {
+          "type": "absolute",
+          "value": 20
+        }
+      }
+    },
+    "type": "numeric_tolerance"
+  },
+  "id": "10x-clonotype-networks-scirpy-tutorial",
+  "metadata": {
+    "eval_type": "scientific",
+    "kit": "scirpy",
+    "task": "clonotype-networks"
+  },
+  "task": "There is a 10x-genomics single cell CellRanger data with RNA-seq (feature bc matrix) and TCR-seq (contig annotations) data. There are two samples, LT5 and LN5. Load and merge both modalities (gex + airr). Perform quality control for TCR data. Unite the two samples into one dataset. Find the fraction of cells with more than one full receptor chain beyond a single pair. Filter out cells with orphan chains and multichains. Find the number of cells with exactly one productive VJ and one productive VDJ chain, and with no IR. Define clonotypes using nucleotide sequence identity. Use all receptor arms and only primary IR for dual IR cells. Calculate clonotype networks with minimum cells threshold 5. Define clonotype using amino-acid sequence similarity, with cutoff 15. Define clonotype clusters (all IRs for double IR cells). Re-calculate networks with min cells = 3. Find the size of the largest clonotype network. Perform clonal expansion analysis. Use breakpoints 1, 2, 5 cells for grouping expanded clonotypes. In which sample (LT5 or LN5) there are more clonotypes? In which sample there are relatively more expanded clonotypes? In which sample there are more clonotypes with number of cells between 2 and 5? Calculare alpha-diversity (normalized shannon entropy) for LN5 sample. How many distinct clonotypes (clone_id) belong to a convergent clonotype cluster?"
+}

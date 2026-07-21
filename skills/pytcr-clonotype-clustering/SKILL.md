@@ -142,6 +142,14 @@ Adds to `mdata.obs`:
 ir.tl.clonotype_network(mdata, min_cells=3, sequence="aa", metric="tcrdist")
 ```
 
+> **Finding network/cluster sizes:** don't try to extract component or size data from `ir.tl.clonotype_network`'s return value or from `mdata` after calling it — that function only computes plot-layout coordinates for `ir.pl.clonotype_network`, not queryable component membership or sizes. The per-cluster cell count is already available as `airr:cc_aa_tcrdist_size` (added in step 4b). "Size of the largest network/cluster" is the number of *cells*, not the number of distinct receptor configurations within it — get it with:
+> ```python
+> mdata.obs["airr:cc_aa_tcrdist_size"].max()
+> # equivalently:
+> mdata.obs.groupby("airr:cc_aa_tcrdist").size().max()
+> ```
+> The same applies to the nucleotide-identity network in step 3 via `airr:clone_id_size`.
+
 ### 4d. Visualize
 
 ```python

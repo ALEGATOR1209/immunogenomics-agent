@@ -92,6 +92,37 @@ re-download, only the loaded context window differs. Memory cost is small
 (measured ~1GB extra RSS for 4x the context here). Use `host/qwen3.6-128k`
 instead of `host/qwen3.6` for anything involving nontrivial tool use.
 
+Even at 128k, a long multi-step task can still fill the window — opencode
+has automatic compaction (`compaction.auto`, on by default) meant to
+summarize and free up space before that happens, but it only triggers if
+opencode knows the model's context size. For custom `openai-compatible`
+models this isn't inferred from anywhere, so each model entry above
+declares `"limit": { "context": N, "output": N }` matching its Modelfile's
+`num_ctx` — without it, auto-compaction never fires and the run instead
+rides straight to the hard wall (observed: token count climbs to exactly
+`num_ctx` and the model silently stops producing output, same failure mode
+as the default-32768 case above, just at whatever ceiling was configured).
+
+**Default model: `glm-4.7-flash-128k`, not a qwen3.6 variant.** `qwen3.6-35b`
+was the original default but was dropped after repeated eval-harness runs
+(see `test/03-clonotype-networks`) reproduced the same failure independent
+of prompt/skill content: partway through a task — consistently right after
+an ordinary tool error the model needed to recover from, e.g. a Python
+`SyntaxError` — its next reasoning turn emits only the literal token
+sequence `<|mask_start|><think>` (a handful of tokens) and the turn ends
+immediately with `finish_reason: "stop"`, no tool call, no error, session
+just over. This reproduced across multiple independent runs and looks like
+a chat-template/reasoning-parsing incompatibility between this quantized
+qwen3.6 build and opencode's `@ai-sdk/openai-compatible` provider, not
+something fixable at the prompt or skill level. `glm-4.7-flash` (30B-A3B
+MoE, 19GB at Q4_K_M) is the current default; `glm-4.7-flash-128k` is the
+same `num_ctx`-derived-model treatment as `qwen3.6-128k` above
+(`ollama create glm-4.7-flash-128k -f Modelfile` with
+`FROM glm-4.7-flash:latest` + `PARAMETER num_ctx 131072` — its architecture
+advertises up to 202752, 131072 was chosen to match the existing qwen
+convention rather than push the ceiling). `qwen3.6`/`qwen3.6-128k` are kept
+in `opencode.json` for comparison runs, not removed.
+
 `host.docker.internal` is Docker's standard container→host DNS name and
 works out of the box on Docker Desktop (macOS, Windows/WSL2). On Linux you
 may need `--add-host=host.docker.internal:host-gateway`, already set for
