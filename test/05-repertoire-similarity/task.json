@@ -1,0 +1,39 @@
+{
+  "grader": {
+    "config": {
+      "ground_truth": {
+        "shared_lt5_ln5": 121,
+        "shared_et1_en1": 100,
+        "shared_cross_patient": 0,
+        "multi_sample_clonotypes": 221,
+        "cluster_by": "patient"
+      },
+      "tolerances": {
+        "shared_lt5_ln5": {
+          "type": "absolute",
+          "value": 10
+        },
+        "shared_et1_en1": {
+          "type": "absolute",
+          "value": 10
+        },
+        "shared_cross_patient": {
+          "type": "absolute",
+          "value": 0
+        },
+        "multi_sample_clonotypes": {
+          "type": "absolute",
+          "value": 15
+        }
+      }
+    },
+    "type": "numeric_tolerance"
+  },
+  "id": "10x-repertoire-similarity-scirpy-tutorial",
+  "metadata": {
+    "eval_type": "scientific",
+    "kit": "scirpy",
+    "task": "repertoire-similarity"
+  },
+  "task": "There is 10x-genomics single cell CellRanger data with RNA-seq (feature bc matrix) and TCR-seq (contig annotations) data for four samples from two patients: LT5 (patient L, tumor tissue) and LN5 (patient L, normal-adjacent tissue), and ET1 (patient E, tumor tissue) and EN1 (patient E, normal-adjacent tissue). There's also a jupyter notebook with data loading, preprocessing, and clonotype definition (nucleotide-identity clone_id) already set up for all four samples. Build upon. Perform repertoire overlap/similarity analysis across the four samples using the sample identity column. Compute the Jaccard distance matrix between samples and use it (with hierarchical clustering) to determine whether samples cluster together primarily by patient identity or by tissue type. How many clonotypes are shared between LT5 and LN5? How many clonotypes are shared between ET1 and EN1? How many clonotypes are shared between LT5 and ET1 (samples from different patients)? How many distinct clonotypes (clone_id) appear in two or more of the four samples in total?"
+}

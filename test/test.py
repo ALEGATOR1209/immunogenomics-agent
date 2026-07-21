@@ -7,7 +7,7 @@ Usage (from inside test/):
     ./test.py 01-data-loading --model host/qwen3.5
 
 --model MODEL: which opencode model to use. Precedence: this flag, then the
-    MODEL env var, then host/devstral-small-2-128k as the final default.
+    MODEL env var, then host/qwen3.6-128k as the final default.
 
 --skills: bind-mounts the project's skills/ (read-only) into the container
     at /root/.claude/skills, opencode's "external skills (auto-loaded)"
@@ -27,6 +27,14 @@ Ctrl-C (or a TERM) stops the in-flight container the same way a timeout
 does - extracts/grades whatever task.ipynb/output.json exists, marks
 eval_result.json with interrupted: true, skips any remaining --n
 iterations, and exits with status 130.
+
+Optional <task-dir>/starter.ipynb: if present, copied into the writable
+workspace as task.ipynb before the container starts, so the agent begins
+from a partially-built notebook instead of an empty one - for tasks scoped
+to one pipeline stage that assume an earlier stage's setup already happened.
+Keep it out of data/ (that mount is read-only, so the agent would have to
+discover and copy it out itself before being able to edit it - exactly the
+kind of read-only-filesystem confusion this is meant to avoid).
 """
 import argparse
 import json
@@ -225,6 +233,11 @@ def run_once(task_name, task_dir, task_image, prompt, model, model_server, memor
     (run_dir / "workspace").mkdir(parents=True, exist_ok=True)
     (run_dir / "prompt.txt").write_text(prompt)
 
+    starter_notebook = task_dir / "starter.ipynb"
+    if starter_notebook.exists():
+        shutil.copy(starter_notebook, run_dir / "workspace" / "task.ipynb")
+        log(f"Pre-seeded task.ipynb from {starter_notebook}")
+
     container_name = f"pytcr-test-{task_name}-{run_id}"
     log(f"Starting container: {container_name} (model: {model}, timeout: {timeout_min}m)")
     log(f"Workspace: {run_dir / 'workspace'}")
@@ -330,7 +343,7 @@ def run_once(task_name, task_dir, task_image, prompt, model, model_server, memor
 
 def main():
     args = parse_args()
-    model = args.model or os.environ.get("MODEL", "host/devstral-small-2-128k")
+    model = args.model or os.environ.get("MODEL", "host/qwen3.6-128k")
     model_server = get_model_server()
     memory_gb = os.environ.get("MEMORY_GB", "8")
 
