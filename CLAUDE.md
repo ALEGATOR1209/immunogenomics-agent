@@ -34,7 +34,7 @@ When adding or editing a skill: match the existing style (a `## Setup` section, 
 Both live at the repo root, both run opencode in a hardened container (`cap_drop: [ALL]`, `no-new-privileges`, no `docker.sock`), but they isolate **different things** and are not interchangeable:
 
 - **`docker/`** — runs Ollama itself inside the container. Fully self-contained, but CPU-only on macOS (Docker Desktop has no Metal passthrough) — see its README's Performance section for the measured cost and the GPU passthrough path for Linux/WSL2+NVIDIA.
-- **`docker-agent/`** — runs only the opencode *client* in the container; the model stays on the host's native `ollama serve` (keeps GPU acceleration) and is reached via `host.docker.internal`. This is what `test/` builds on top of (its images `FROM pytcr-agent:latest`). Model/provider config lives in `docker-agent/opencode.json`.
+- **`docker-agent/`** — runs only the opencode *client* in the container; the model stays on the host's native `ollama serve` (keeps GPU acceleration) and is reached via `host.docker.internal`. This is what `test/` builds on top of (its images `FROM pytcr-agent:latest`). Model/provider config lives in `docker-agent/opencode.json`. **Known unresolved issue**: Ollama's OpenAI-compatible endpoint silently drops tool calls under streaming ([ollama/ollama#12557](https://github.com/ollama/ollama/issues/12557)), causing agent runs to terminate mid-task with `finish_reason: "stop"` and no error — reproduced on multiple models. A switch to llama.cpp's own `llama-server` was attempted to route around it (script kept at `docker-agent/llama-server.sh` for a future retry) but blocked on GGUF/architecture-version incompatibilities between Ollama's blobs and the installed llama.cpp — see `docker-agent/README.md`'s "Known issue" section for the full story before re-attempting.
 
 **Known gotchas already root-caused during development** (see each README for detail — don't re-derive these):
 - Ollama loads a model with only a **32768-token context by default**, regardless of what the model architecture supports — invisible until a multi-step agent task exhausts it and the model silently stops producing output (no error). Fix used here: a derived model (`ollama create <name> -f Modelfile` with `PARAMETER num_ctx N`), not a global Ollama config change.
@@ -53,7 +53,7 @@ Per invocation: builds `pytcr-agent:latest` (once, cached), generates/reuses `<t
 
 Task directory shape (`test/<NN-name>/`): `task.json` (id, task prompt, `grader.config.{ground_truth,tolerances}`, `metadata`), `data/` (**not git-tracked** — supply separately, `.gitignore` excludes `data`), and a generated `Dockerfile`. `grade.py`'s tolerance check supports `{"type": "absolute", "value": N}` per numeric field; fields without a tolerance entry are compared as exact string match, case-insensitive.
 
-Default model is `host/glm-4.7-flash-128k` (not `host/glm-4.7-flash` — see the context-window gotcha above; switched from `host/qwen3.6-128k` after repeated runs surfaced a qwen3.6-specific chat-template bug where the reasoning channel leaks raw `<|mask_start|>`/`<|mask_end|>` tokens and the turn terminates early, mid-task, with no error); override per-run with `MODEL=... ./test.py ...`. `runs/`, `test/logs`, `test/notebooks`, `test/results`, and all `*.ipynb` are gitignored — they're local run history/scratch, not source.
+Default model is `host/devstral-small-2-128k` (not `host/devstral-small-2` — see the context-window gotcha above; a 24B model purpose-built for agentic coding, tried after `qwen3.6-128k` and `glm-4.7-flash-128k` both hit the same `finish_reason: "stop"`-mid-task failure — pointing to the shared Ollama streaming bug above rather than either model specifically, so the swap to devstral is a capability/coverage bet, not a confirmed fix). Override per-run with `--model host/<name>` or `MODEL=... ./test.py ...` (flag takes precedence over the env var). `eval_result.json` records which model, harness (`opencode`), and model server (read from `docker-agent/opencode.json`'s provider name) a run actually used. `runs/`, `test/logs`, `test/notebooks`, `test/results`, and all `*.ipynb` are gitignored — they're local run history/scratch, not source.
 
 ## Common commands
 
@@ -72,6 +72,7 @@ cd test
 ./test.py 01-data-loading --skills         # mounts .claude/skills into the container
 ./test.py 01-data-loading --timeout 30 --n 3   # 30-minute timeout, 3 repeated runs
 MODEL=host/qwen3.5 ./test.py 01-data-loading
+./test.py 01-data-loading --model host/qwen3.5    # equivalent, flag takes precedence over MODEL
 python3 grade.py <task.json> <output.json> [duration_seconds] [skills]   # re-grade a saved answer
 ```
 

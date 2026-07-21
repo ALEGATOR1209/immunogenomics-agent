@@ -2,8 +2,12 @@
 """Runs one task directory's evaluation inside an isolated container.
 
 Usage (from inside test/):
-    ./test.py <task-dir-name> [--skills] [--timeout MINUTES] [--n COUNT]
+    ./test.py <task-dir-name> [--skills] [--timeout MINUTES] [--n COUNT] [--model MODEL]
     MODEL=host/qwen3.5 ./test.py 01-data-loading --skills
+    ./test.py 01-data-loading --model host/qwen3.5
+
+--model MODEL: which opencode model to use. Precedence: this flag, then the
+    MODEL env var, then host/devstral-small-2-128k as the final default.
 
 --skills: bind-mounts the project's skills/ (read-only) into the container
     at /root/.claude/skills, opencode's "external skills (auto-loaded)"
@@ -87,7 +91,7 @@ class QuietArgumentParser(argparse.ArgumentParser):
 
 def parse_args():
     usage = (
-        "Usage: test.py <task-dir-name> [--skills] [--timeout MINUTES] [--n COUNT]  "
+        "Usage: test.py <task-dir-name> [--skills] [--timeout MINUTES] [--n COUNT] [--model MODEL]  "
         "(run from inside test/, e.g. ./test.py 01-data-loading --skills)"
     )
     parser = QuietArgumentParser(add_help=False, usage=argparse.SUPPRESS)
@@ -95,6 +99,7 @@ def parse_args():
     parser.add_argument("--skills", action="store_true")
     parser.add_argument("--timeout", type=int, default=20)
     parser.add_argument("--n", type=int, default=1)
+    parser.add_argument("--model", type=str, default=None)
     try:
         args = parser.parse_args()
     except SystemExit:
@@ -106,6 +111,18 @@ def parse_args():
     if args.n <= 0:
         die(f"--n must be a positive integer, got: {args.n}")
     return args
+
+
+def get_model_server():
+    """Reads the provider name (e.g. "Ollama") out of docker-agent/opencode.json,
+    so eval_result.json records whatever's actually serving the model rather
+    than a hardcoded string that could go stale if the provider changes."""
+    opencode_json = REPO_ROOT / "docker-agent" / "opencode.json"
+    try:
+        config = json.loads(opencode_json.read_text())
+        return config["provider"]["host"]["name"]
+    except (OSError, json.JSONDecodeError, KeyError):
+        return "unknown"
 
 
 def check_docker():
@@ -200,7 +217,7 @@ def stream_docker_run(cmd, log_file, pretty_file, container_name):
         return proc.returncode, interrupted
 
 
-def run_once(task_name, task_dir, task_image, prompt, model, memory_gb, use_skills, timeout_min, iter_num, n):
+def run_once(task_name, task_dir, task_image, prompt, model, model_server, memory_gb, use_skills, timeout_min, iter_num, n):
     run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
     if n > 1:
         run_id = f"{run_id}_{iter_num}"
@@ -218,6 +235,8 @@ def run_once(task_name, task_dir, task_image, prompt, model, memory_gb, use_skil
     header = (
         f"=== Task: {task_name} ===\n"
         f"=== Model: {model} ===\n"
+        f"=== Harness: opencode ===\n"
+        f"=== Model server: {model_server} ===\n"
         f"=== Skills: {'enabled (' + str(REPO_ROOT / 'skills') + ')' if use_skills else 'disabled'} ===\n"
         f"=== Timeout: {timeout_min}m ===\n"
         f"=== Prompt: ===\n"
@@ -291,6 +310,9 @@ def run_once(task_name, task_dir, task_image, prompt, model, memory_gb, use_skil
     eval_data = json.loads(grade_result.stdout)
     eval_data["timed_out"] = timed_out
     eval_data["interrupted"] = interrupted
+    eval_data["model"] = model
+    eval_data["harness"] = "opencode"
+    eval_data["model_server"] = model_server
     eval_file.write_text(json.dumps(eval_data, indent=2))
 
     eval_block = f"=== Evaluation ===\n{eval_file.read_text()}\n"
@@ -308,7 +330,8 @@ def run_once(task_name, task_dir, task_image, prompt, model, memory_gb, use_skil
 
 def main():
     args = parse_args()
-    model = os.environ.get("MODEL", "host/glm-4.7-flash-128k")
+    model = args.model or os.environ.get("MODEL", "host/devstral-small-2-128k")
+    model_server = get_model_server()
     memory_gb = os.environ.get("MEMORY_GB", "8")
 
     task_dir = SCRIPT_DIR / args.task_name
@@ -341,7 +364,7 @@ def main():
         if args.n > 1:
             log(f"=== Run {i}/{args.n} ===")
         status, interrupted = run_once(
-            args.task_name, task_dir, task_image, prompt, model, memory_gb,
+            args.task_name, task_dir, task_image, prompt, model, model_server, memory_gb,
             args.skills, args.timeout, i, args.n,
         )
         statuses.append(status)

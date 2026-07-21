@@ -34,7 +34,7 @@ consequences:
 
   ```bash
   ollama serve
-  ollama pull qwen3.6
+  ollama pull glm-4.7-flash
   ```
 
 ## Quick start
@@ -47,14 +47,14 @@ This builds the image, starts the container, and confirms it can reach the
 host's Ollama server. Then:
 
 ```bash
-./docker-agent/chat.sh                # interactive session, default model
-./docker-agent/chat.sh host/qwen3.5   # or any other configured model
+./docker-agent/chat.sh                        # interactive session, default model
+./docker-agent/chat.sh host/qwen3.5            # or any other configured model
 ```
 
 For scripting or automated testing:
 
 ```bash
-docker exec pytcr-agent opencode run --model host/qwen3.6 "your prompt"
+docker exec pytcr-agent opencode run --model host/glm-4.7-flash-128k "your prompt"
 ```
 
 ## Configuration
@@ -68,7 +68,7 @@ named `host`, pointing at the host's Ollama server:
     "host": {
       "npm": "@ai-sdk/openai-compatible",
       "options": { "baseURL": "http://host.docker.internal:11434/v1" },
-      "models": { "qwen3.6": { "name": "qwen3.6-35b" } }
+      "models": { "glm-4.7-flash": { "name": "GLM-4.7-Flash" } }
     }
   }
 }
@@ -79,18 +79,18 @@ Add an entry per model you want available, then rebuild
 are referenced as `host/<name>`, matching the provider name.
 
 **Context window note:** Ollama defaults a model's loaded context window to
-32768 tokens regardless of what the model architecture actually supports
-(qwen3.6's Modelfile advertises up to 262144) — visible via `ollama ps`'s
-`CONTEXT` column, and as the `-c` flag on the underlying `llama-server`
-process (`ps aux | grep llama-server`). Multi-step agentic tasks that
-inspect real data can exhaust 32768 tokens of cumulative tool-call history
-before finishing, with no error — the model just silently stops producing
-useful output once the context fills. `qwen3.6-128k` above is a derived
-model (`ollama create qwen3.6-128k -f Modelfile` with `FROM qwen3.6:latest` +
-`PARAMETER num_ctx 131072`) for exactly this case — same weights, no
-re-download, only the loaded context window differs. Memory cost is small
-(measured ~1GB extra RSS for 4x the context here). Use `host/qwen3.6-128k`
-instead of `host/qwen3.6` for anything involving nontrivial tool use.
+32768 tokens regardless of what the model architecture actually supports —
+visible via `ollama ps`'s `CONTEXT` column, and as the `-c` flag on the
+underlying `llama-server` process (`ps aux | grep llama-server`). Multi-step
+agentic tasks that inspect real data can exhaust 32768 tokens of cumulative
+tool-call history before finishing, with no error — the model just silently
+stops producing useful output once the context fills. `glm-4.7-flash-128k`
+above is a derived model (`ollama create glm-4.7-flash-128k -f Modelfile`
+with `FROM glm-4.7-flash:latest` + `PARAMETER num_ctx 131072`) for exactly
+this case — same weights, no re-download, only the loaded context window
+differs. Memory cost is small (measured ~1GB extra RSS for 4x the context).
+Use `host/glm-4.7-flash-128k` instead of `host/glm-4.7-flash` for anything
+involving nontrivial tool use.
 
 Even at 128k, a long multi-step task can still fill the window — opencode
 has automatic compaction (`compaction.auto`, on by default) meant to
@@ -103,25 +103,52 @@ rides straight to the hard wall (observed: token count climbs to exactly
 `num_ctx` and the model silently stops producing output, same failure mode
 as the default-32768 case above, just at whatever ceiling was configured).
 
-**Default model: `glm-4.7-flash-128k`, not a qwen3.6 variant.** `qwen3.6-35b`
-was the original default but was dropped after repeated eval-harness runs
-(see `test/03-clonotype-networks`) reproduced the same failure independent
-of prompt/skill content: partway through a task — consistently right after
-an ordinary tool error the model needed to recover from, e.g. a Python
-`SyntaxError` — its next reasoning turn emits only the literal token
-sequence `<|mask_start|><think>` (a handful of tokens) and the turn ends
-immediately with `finish_reason: "stop"`, no tool call, no error, session
-just over. This reproduced across multiple independent runs and looks like
-a chat-template/reasoning-parsing incompatibility between this quantized
-qwen3.6 build and opencode's `@ai-sdk/openai-compatible` provider, not
-something fixable at the prompt or skill level. `glm-4.7-flash` (30B-A3B
-MoE, 19GB at Q4_K_M) is the current default; `glm-4.7-flash-128k` is the
-same `num_ctx`-derived-model treatment as `qwen3.6-128k` above
-(`ollama create glm-4.7-flash-128k -f Modelfile` with
-`FROM glm-4.7-flash:latest` + `PARAMETER num_ctx 131072` — its architecture
-advertises up to 202752, 131072 was chosen to match the existing qwen
-convention rather than push the ceiling). `qwen3.6`/`qwen3.6-128k` are kept
-in `opencode.json` for comparison runs, not removed.
+### Known issue — Ollama's OpenAI-compat endpoint drops tool calls under streaming
+
+Repeated eval-harness runs (see `test/03-clonotype-networks`) have hit a
+failure independent of model or prompt/skill content: partway through a
+task — consistently right after an ordinary tool error the model needed to
+recover from, e.g. a Python `SyntaxError` — the turn ends abruptly with
+`finish_reason: "stop"`, no tool call, no error, session just over. This
+reproduced on **both** qwen3.6 (reasoning channel leaking literal
+`<|mask_start|><think>` tokens) and glm-4.7-flash (a malformed
+`<tool_call>`-tag leak) — two structurally different models, same failure
+shape, different leak signatures. Root cause: this is a documented,
+maintainer-acknowledged upstream Ollama bug
+([ollama/ollama#12557](https://github.com/ollama/ollama/issues/12557)) —
+Ollama's OpenAI-compatible endpoint (`/v1/chat/completions`, exactly what
+`opencode.json` is pointed at) silently drops tool calls under streaming.
+Ollama's *native* `/api/chat` endpoint doesn't have this bug, but opencode
+has no built-in native-Ollama provider.
+
+**We tried switching to llama.cpp's own `llama-server` to route around this
+entirely (cutting Ollama's serving path out, reusing its already-downloaded
+GGUF blobs directly — `~/.ollama/models/blobs/sha256-...` are plain GGUF
+files, confirmed via the `GGUF` magic number) — it didn't work, for reasons
+independent of the tool-calling bug itself:**
+- `glm-4.7-flash`'s architecture (`glm4moelite`) isn't recognized by
+  llama.cpp, even on the latest Homebrew-packaged stable release (`brew
+  upgrade llama.cpp` to 10050 didn't help).
+- `qwen3.6`'s GGUF fails on a metadata-schema mismatch: `error loading model
+  hyperparameters: key qwen35moe.rope.dimension_sections has wrong array
+  length; expected 4, got 3` — the architecture is recognized, but this
+  specific blob's metadata was written by a different llama.cpp/converter
+  version than what's installed now.
+
+Both are real, verified blockers (not something to retry past) — Ollama's
+distributed GGUF blobs are structurally valid GGUF files but aren't
+guaranteed metadata-schema-compatible with an independently-versioned
+llama.cpp build. A retry would need either freshly-converted GGUFs from a
+source that targets the current llama.cpp version (e.g. Unsloth's
+Hugging Face GGUF repos) or building llama.cpp from source/HEAD past what
+Homebrew packages — neither attempted yet. Until then, this setup is back on
+`ollama serve`, living with the streaming-tool-call bug (mitigated only by
+`test/SYSTEM.md`'s explicit "don't rewrite the whole notebook after one
+error" instruction, which reduces how often the agent lands on the exact
+recovery-after-error moment that seems to trigger it — not a real fix).
+Also worth noting for a future attempt: `--jinja` is mandatory for GLM
+models on `llama-server` (without it, tool calls/thinking blocks come out
+malformed — a different bug, same symptom class as the one above).
 
 `host.docker.internal` is Docker's standard container→host DNS name and
 works out of the box on Docker Desktop (macOS, Windows/WSL2). On Linux you
