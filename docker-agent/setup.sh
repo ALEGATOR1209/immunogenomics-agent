@@ -7,6 +7,10 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COMPOSE_FILE="$SCRIPT_DIR/docker-compose.yml"
 CONTAINER_NAME="pytcr-agent"
+# The model chat.sh (and test/test.py) default to. It's a derived model -
+# see the context window note in README.md - so it won't exist just from an
+# `ollama pull`; ../setup.sh creates it.
+DEFAULT_MODEL="qwen3.6-128k"
 
 log() { echo ">> $*"; }
 die() { echo "ERROR: $*" >&2; exit 1; }
@@ -36,6 +40,10 @@ if ! curl -s -m 3 http://localhost:11434/api/tags >/dev/null 2>&1; then
   echo "    ollama serve"
   echo "  (or, if it's already running, check it's actually bound to 11434 - see 'ollama list' / your opencode.json)."
   log "Continuing anyway - the container will build fine, it just won't have anything to talk to yet."
+elif ! curl -s -m 3 http://localhost:11434/api/tags | grep -q "\"$DEFAULT_MODEL" ; then
+  log "WARNING: the host is serving, but '$DEFAULT_MODEL' (what chat.sh and test/test.py default to) isn't among its models."
+  echo "    Create it with:  ../setup.sh --models $DEFAULT_MODEL"
+  echo "  (or pass an existing model explicitly: ./docker-agent/chat.sh host/<model>)."
 fi
 
 # --- 3. Build and start ---

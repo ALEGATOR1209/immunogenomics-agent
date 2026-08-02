@@ -34,7 +34,17 @@ consequences:
 
   ```bash
   ollama serve
-  ollama pull glm-4.7-flash
+  ollama pull qwen3.6
+  ```
+
+  Then derive the 128k-context variant this setup defaults to (see
+  [the context window note](#configuration) for why) — or just run the
+  repo-root [`../setup.sh`](../setup.sh), which does the pull, the derive,
+  and everything below in one go:
+
+  ```bash
+  printf 'FROM qwen3.6:latest\nPARAMETER num_ctx 131072\n' > Modelfile
+  ollama create qwen3.6-128k -f Modelfile
   ```
 
 ## Quick start
@@ -47,14 +57,14 @@ This builds the image, starts the container, and confirms it can reach the
 host's Ollama server. Then:
 
 ```bash
-./docker-agent/chat.sh                        # interactive session, default model
-./docker-agent/chat.sh host/qwen3.5            # or any other configured model
+./docker-agent/chat.sh                        # interactive session, default: host/qwen3.6-128k
+./docker-agent/chat.sh host/glm-4.7-flash-128k # or any other configured model
 ```
 
 For scripting or automated testing:
 
 ```bash
-docker exec pytcr-agent opencode run --model host/glm-4.7-flash-128k "your prompt"
+docker exec pytcr-agent opencode run --model host/qwen3.6-128k "your prompt"
 ```
 
 ## Configuration
@@ -68,7 +78,7 @@ named `host`, pointing at the host's Ollama server:
     "host": {
       "npm": "@ai-sdk/openai-compatible",
       "options": { "baseURL": "http://host.docker.internal:11434/v1" },
-      "models": { "glm-4.7-flash": { "name": "GLM-4.7-Flash" } }
+      "models": { "qwen3.6": { "name": "qwen3.6-35b" } }
     }
   }
 }
@@ -84,13 +94,13 @@ visible via `ollama ps`'s `CONTEXT` column, and as the `-c` flag on the
 underlying `llama-server` process (`ps aux | grep llama-server`). Multi-step
 agentic tasks that inspect real data can exhaust 32768 tokens of cumulative
 tool-call history before finishing, with no error — the model just silently
-stops producing useful output once the context fills. `glm-4.7-flash-128k`
-above is a derived model (`ollama create glm-4.7-flash-128k -f Modelfile`
-with `FROM glm-4.7-flash:latest` + `PARAMETER num_ctx 131072`) for exactly
-this case — same weights, no re-download, only the loaded context window
-differs. Memory cost is small (measured ~1GB extra RSS for 4x the context).
-Use `host/glm-4.7-flash-128k` instead of `host/glm-4.7-flash` for anything
-involving nontrivial tool use.
+stops producing useful output once the context fills. Every `*-128k` entry
+in `opencode.json` is a derived model (`ollama create qwen3.6-128k -f
+Modelfile` with `FROM qwen3.6:latest` + `PARAMETER num_ctx 131072`) for
+exactly this case — same weights, no re-download, only the loaded context
+window differs. Memory cost is small (measured ~1GB extra RSS for 4x the
+context). Use `host/qwen3.6-128k` (the default here and in `test/`) rather
+than `host/qwen3.6` for anything involving nontrivial tool use.
 
 Even at 128k, a long multi-step task can still fill the window — opencode
 has automatic compaction (`compaction.auto`, on by default) meant to

@@ -10,6 +10,8 @@ This is a **skills-and-infrastructure repo** for AIRR-seq analysis, plus a small
 2. **`docker/` and `docker-agent/`** — two different sandboxed containers for running an LLM agent, built for different tradeoffs (see below).
 3. **`test/`** — a harness that runs opencode inside a container against a fixed task + dataset and grades the output.
 
+Tying them together at the root: `setup.sh` (one-shot bootstrap for a fresh clone) and `README.md` (the human-facing entry point — keep it in sync when the setup flow or harness CLI changes). **`AGENTS.md` is a symlink to this file**, so opencode and Claude Code read the same guidance — edit `CLAUDE.md`, never copy content between the two.
+
 ## Architecture: two independent skill families
 
 The skills split along **single-cell vs. bulk TCR-seq data**, and the two families do not interoperate — they use different underlying tools and never share a data object.
@@ -19,7 +21,7 @@ The skills split along **single-cell vs. bulk TCR-seq data**, and the two famili
 pytcr-data-loading → pytcr-preprocess → pytcr-clonotype-clustering
     → pytcr-clonotype-analysis / pytcr-gene-motifs / pytcr-repertoire-comparison / pytcr-gex-integration
 ```
-Operates on a scirpy `MuData` object (`mdata`) with `gex` (transcriptomics) and `airr` (receptor) modalities.
+Operates on a scirpy `MuData` object (`mdata`) with `gex` (transcriptomics) and `airr` (receptor) modalities. `pytcr-preprocess` covers only the `airr` modality; **`pytcr-sc-rnaseq-preprocessing`** is its `gex`-side counterpart (scanpy QC, normalization, HVG selection) and sits off to the side of the chain above — it runs after `pytcr-data-loading`, independently of and typically alongside `pytcr-preprocess`.
 
 **Bulk (`pytcr-bulk-*`), via plain pandas.** There is no installable package backing this family — the "tool" is pandas logic ported and refactored from the pyTCR paper's (Peng et al., Mangul Lab) analysis notebooks, run directly in the user's own notebook:
 ```
@@ -40,26 +42,44 @@ Both live at the repo root, both run opencode in a hardened container (`cap_drop
 - Ollama loads a model with only a **32768-token context by default**, regardless of what the model architecture supports — invisible until a multi-step agent task exhausts it and the model silently stops producing output (no error). Fix used here: a derived model (`ollama create <name> -f Modelfile` with `PARAMETER num_ctx N`), not a global Ollama config change.
 - A **read-only root filesystem breaks opencode's TUI** (`Effect.tryPromise` / "Unexpected error") — reproduced and isolated to `read_only: true` specifically, independent of `cap_drop`/`no-new-privileges`/volume state. `docker-agent/docker-compose.yml` intentionally does not set it; see its README for the tradeoff.
 - Headless/non-interactive opencode runs need `--dangerously-skip-permissions` (not `--auto` — that flag doesn't exist despite what `--help` might suggest from a different opencode version) or they hang waiting for a permission prompt that never comes.
-- opencode auto-loads Claude Code-format skills from `~/.claude/skills/<name>/SKILL.md` — the container's **home directory**, not the project-relative `.claude/skills` Claude Code itself uses. `test/test.py --skills` mounts the project's `.claude/skills` there.
+- opencode auto-loads Claude Code-format skills from `~/.claude/skills/<name>/SKILL.md` — the container's **home directory**, not the project-relative `.claude/skills` Claude Code itself uses. `test/test.py --skills` bind-mounts `skills/` (read-only) to `/root/.claude/skills` in the container — sourced from `skills/` directly, *not* from the gitignored `.claude/skills` symlink, so the harness works on a fresh clone that never ran `setup.sh`.
 - Docker's `internal: true` network mode blocks `host.docker.internal` too, not just the wider internet — evaluated and rejected as an egress-restriction mechanism for `docker-agent/` (see its README's "Known limitation").
 
 ## Architecture: the eval harness (`test/`)
 
-`test/test.py <task-dir-name> [--skills] [--timeout MINUTES] [--n COUNT]` — run from inside `test/` — is the whole harness. It is deliberately a single Python script, not a package; keep changes in that style.
+`test/test.py <task-dir-name> [--skills] [--timeout MINUTES] [--n COUNT] [--model MODEL]` — run from inside `test/` — is the whole harness. It is deliberately a single Python script, not a package; keep changes in that style. `test/run_all.py` is a thin driver on top of it (see below).
 
-Per invocation: builds `pytcr-agent:latest` (once, cached), generates/reuses `<task-dir>/Dockerfile` (extends `pytcr-agent:latest` with a Miniforge/mamba env from `test/environment.yml` — mamba specifically, because plain conda is too slow resolving the bioconda/conda-forge scanpy+scirpy stack), renders `test/SYSTEM.md`'s `<TASK>`/`<OUTPUT_FORMAT>` placeholders from the task's `task.json` (`render_prompt.py` — `<OUTPUT_FORMAT>` is `ground_truth` with every value masked to its zero-equivalent, so the agent sees the required JSON shape but never the answers), runs opencode non-interactively inside a fresh container (`--rm`, brand new every run — no state carries over), extracts `task.ipynb`/`output.json` into `runs/<timestamp>/outputs/`, then grades against `task.json`'s `grader.config` via `grade.py` into `runs/<timestamp>/eval_result.json`.
+Per invocation: builds `pytcr-agent:latest` (once, cached), generates/reuses `<task-dir>/Dockerfile` (extends `pytcr-agent:latest` with a Miniforge/mamba env from `test/environment.yml` — mamba specifically, because plain conda is too slow resolving the bioconda/conda-forge scanpy+scirpy stack), renders `test/SYSTEM.md`'s `<TASK>`/`<OUTPUT_FORMAT>` placeholders from the task's `task.json` (`render_prompt.py` — `<OUTPUT_FORMAT>` is `ground_truth` with every value masked to its zero-equivalent, so the agent sees the required JSON shape but never the answers), runs opencode non-interactively inside a fresh container (`--rm`, brand new every run — no state carries over; memory-capped via `MEMORY_GB`, default 8), extracts `task.ipynb`/`output.json`, then grades against `task.json`'s `grader.config` via `grade.py`.
+
+Everything from a run lands in **`test/<task-dir>/runs/<timestamp>/`** (per-task, not a shared top-level `runs/`): `prompt.txt` (the exact rendered prompt), `run.jsonl` + `run.txt` (the agent's raw event stream and a readable rendering of it), `outputs/` (the extracted `task.ipynb`/`output.json`), and `eval_result.json`.
 
 `--timeout` (default 20 minutes) stops the container if the agent hasn't finished in time; `--n` (default 1) repeats the run that many times, each as its own `runs/<timestamp>_<i>/` directory. Both a timeout and a Ctrl-C stop the in-flight container and still extract/grade whatever `task.ipynb`/`output.json` exists at that point — `eval_result.json` gets `timed_out`/`interrupted` boolean fields marking which (if either) happened; a Ctrl-C also skips any remaining `--n` iterations and exits with status 130.
+
+**`test/run_all.py`** runs the full matrix — every task directory containing a `task.json`, 5 iterations with `--skills` and 5 without, 60-minute timeout each (constants at the top of the file). It suppresses `test.py`'s stdout because `test.py` interleaves the model's raw output with its own progress and has no flag to separate them; progress is reported instead from each run's `eval_result.json` as it lands, and the model's full output is still on disk in `run.txt`/`run.jsonl`.
+
+**`test/SYSTEM.md`** is the shared prompt scaffold wrapped around every task, and its instructions are tuned against failure modes actually observed in runs — build `task.ipynb` and `output.json` *incrementally* (partial credit survives a mid-task death), fix failing cells in place rather than rewriting the pipeline from scratch (which burns the context budget), don't dump large tool outputs, execute the notebook end-to-end before finishing, and load any relevant skill via the Skill tool before writing code (a description alone doesn't convey the APIs). Treat edits to it as changing the experiment, not just the wording — it applies to every task and every past run was graded under the previous version.
 
 Task directory shape (`test/<NN-name>/`): `task.json` (id, task prompt, `grader.config.{ground_truth,tolerances}`, `metadata`), `data/` (**not git-tracked** — supply separately, `.gitignore` excludes `data`), an optional `starter.ipynb`, and a generated `Dockerfile`. `grade.py`'s tolerance check supports `{"type": "absolute", "value": N}` per numeric field; fields without a tolerance entry are compared as exact string match, case-insensitive.
 
 **`starter.ipynb`** (optional): if present, `test.py` copies it into the run's workspace as `task.ipynb` before the container starts, so the agent begins from a partially-built notebook instead of empty — for tasks deliberately scoped to one pipeline stage, assuming an earlier stage already happened (task prompt says "there's a jupyter notebook with ... already set up. Build upon."). Must live at the task directory root, not inside `data/` — that mount is read-only, so a notebook placed there can't be edited in place and the agent would have to discover and copy it out itself first. `04-gene-usage`, `06-clonotype-clustering`, and `07-clonal-expansion` all use this; `06`/`07` split what was originally a single, much longer `03-clonotype-networks` task into two independently-scoped ones (`06` = data loading through clonotype-cluster networks, `07` = clonal expansion/diversity/convergence, picking up from a starter notebook that already has clonotypes and clusters defined) to test whether narrower scope + a starter notebook actually improves completion rate over `03`'s all-in-one version — `03` itself is left as-is for that comparison.
 
-Default model is `host/qwen3.6-128k` (not `host/qwen3.6` — see the context-window gotcha above). `glm-4.7-flash-128k` and `devstral-small-2-128k` were both tried as replacements after qwen3.6 hit the `finish_reason: "stop"`-mid-task failure (pointing to the shared Ollama streaming bug above, not a qwen3.6-specific issue) — glm-4.7-flash got meaningfully deep into real work before failing the same way, but devstral-small-2 regressed badly: it died almost immediately and highly reproducibly (3/3 runs) at the same point, announcing intent to load a skill as plain text and then stopping without ever issuing the tool call, at ~10k tokens with no context pressure. Reverted to qwen3.6-128k as the default; consider `glm-4.7-flash-128k` a reasonable thing to retry, devstral-small-2 not currently viable in this harness. Override per-run with `--model host/<name>` or `MODEL=... ./test.py ...` (flag takes precedence over the env var). `eval_result.json` records which model, harness (`opencode`), and model server (read from `docker-agent/opencode.json`'s provider name) a run actually used. `runs/`, `test/logs`, `test/notebooks`, `test/results`, and all `*.ipynb` are gitignored — they're local run history/scratch, not source.
+Default model is `host/qwen3.6-128k` (not `host/qwen3.6` — see the context-window gotcha above). `glm-4.7-flash-128k` and `devstral-small-2-128k` were both tried as replacements after qwen3.6 hit the `finish_reason: "stop"`-mid-task failure (pointing to the shared Ollama streaming bug above, not a qwen3.6-specific issue) — glm-4.7-flash got meaningfully deep into real work before failing the same way, but devstral-small-2 regressed badly: it died almost immediately and highly reproducibly (3/3 runs) at the same point, announcing intent to load a skill as plain text and then stopping without ever issuing the tool call, at ~10k tokens with no context pressure. Reverted to qwen3.6-128k as the default; consider `glm-4.7-flash-128k` a reasonable thing to retry, devstral-small-2 not currently viable in this harness. Override per-run with `--model host/<name>` or `MODEL=... ./test.py ...` (flag takes precedence over the env var). `eval_result.json` records which model, harness (`opencode`), and model server (read from `docker-agent/opencode.json`'s provider name) a run actually used.
+
+**`docker-agent/opencode.json` is the single source of truth for models** — which ones exist and what `limit.context` each claims. The root `setup.sh` reads `num_ctx` for a derived `*-128k` model straight out of it so the two can't drift apart; they must match, or opencode's auto-compaction never fires (it compacts against its declared limit, while the server truncates at the real one). Adding a model means adding it there first.
+
+Gitignored, and therefore absent on a fresh clone: `.claude` (hence the `setup.sh` symlink step), `data` (every task's dataset — supplied separately), `test/*/runs`, `test/logs`, `test/notebooks`, `test/results`, `.vscode`, and all `*.ipynb`. These are local run history/scratch/inputs, not source.
 
 ## Common commands
 
 ```bash
+# Fresh-clone bootstrap (host models + agent container + gitignored bits)
+./setup.sh                                 # provisions host/qwen3.6-128k, builds the agent container, links .claude/skills -> skills/
+./setup.sh --models glm-4.7-flash-128k     # a different model (must be declared in docker-agent/opencode.json)
+./setup.sh --all-models                    # every *-128k model in opencode.json
+./setup.sh --skip-models                   # container + skills symlink only
+./setup.sh --skip-container                # host side only, no Docker needed
+./setup.sh --with-host-opencode            # also npm-install opencode on the host (normally unnecessary)
+
 # Isolated Ollama-in-container setup
 ./docker/setup.sh                          # build + start + memory check
 ./docker/chat.sh [model]                   # interactive REPL
@@ -71,10 +91,12 @@ Default model is `host/qwen3.6-128k` (not `host/qwen3.6` — see the context-win
 # Eval harness (run from inside test/)
 cd test
 ./test.py 01-data-loading                  # no skills mounted
-./test.py 01-data-loading --skills         # mounts .claude/skills into the container
+./test.py 01-data-loading --skills         # mounts skills/ read-only at the container's ~/.claude/skills
 ./test.py 01-data-loading --timeout 30 --n 3   # 30-minute timeout, 3 repeated runs
 MODEL=host/qwen3.5 ./test.py 01-data-loading
 ./test.py 01-data-loading --model host/qwen3.5    # equivalent, flag takes precedence over MODEL
+MEMORY_GB=16 ./test.py 01-data-loading            # raise the container memory cap (default 8)
+./run_all.py                                      # every task, 5x with skills + 5x without, 60m cap each
 python3 grade.py <task.json> <output.json> [duration_seconds] [skills]   # re-grade a saved answer
 ```
 
