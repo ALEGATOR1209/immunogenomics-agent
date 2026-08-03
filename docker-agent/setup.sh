@@ -1,16 +1,14 @@
 #!/bin/bash
-# Builds and starts the isolated opencode container, which talks to the
-# host's native `ollama serve` over host.docker.internal rather than
-# running any model itself. Safe to re-run.
+# Builds and starts the isolated pi container, which talks to the host's
+# llama.cpp router over host.docker.internal rather than running any model
+# itself. Safe to re-run.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COMPOSE_FILE="$SCRIPT_DIR/docker-compose.yml"
 CONTAINER_NAME="pytcr-agent"
-# The model chat.sh (and test/test.py) default to. It's a derived model -
-# see the context window note in README.md - so it won't exist just from an
-# `ollama pull`; ../setup.sh creates it.
-DEFAULT_MODEL="qwen3.6-128k"
+PORT="${LLAMA_PORT:-8080}"
+API="http://127.0.0.1:$PORT"
 
 log() { echo ">> $*"; }
 die() { echo "ERROR: $*" >&2; exit 1; }
@@ -35,15 +33,33 @@ fi
 log "Docker is running."
 
 # --- 2. The host needs to actually be serving a model for this to be useful ---
-if ! curl -s -m 3 http://localhost:11434/api/tags >/dev/null 2>&1; then
-  log "WARNING: nothing answering on host port 11434. Start it with:"
-  echo "    ollama serve"
-  echo "  (or, if it's already running, check it's actually bound to 11434 - see 'ollama list' / your opencode.json)."
-  log "Continuing anyway - the container will build fine, it just won't have anything to talk to yet."
-elif ! curl -s -m 3 http://localhost:11434/api/tags | grep -q "\"$DEFAULT_MODEL" ; then
-  log "WARNING: the host is serving, but '$DEFAULT_MODEL' (what chat.sh and test/test.py default to) isn't among its models."
-  echo "    Create it with:  ../setup.sh --models $DEFAULT_MODEL"
-  echo "  (or pass an existing model explicitly: ./docker-agent/chat.sh host/<model>)."
+if ! curl -s -m 3 "$API/models" >/dev/null 2>&1; then
+  log "WARNING: no llama.cpp router answering on host port $PORT. Start it with:"
+  echo "    ./docker-agent/llama-server.sh"
+  log "Continuing anyway - the container builds fine, it just won't have anything to talk to yet."
+else
+  loaded="$(curl -s -m 5 "$API/models" | python3 -c '
+import json, sys
+try:
+    print(sum(1 for m in json.load(sys.stdin)["data"] if m["status"]["value"] == "loaded"))
+except Exception:
+    print(0)
+' 2>/dev/null || echo 0)"
+  if [[ "$loaded" == "0" ]]; then
+    log "Router is up on $PORT but has no model loaded (pi can only select loaded models)."
+    echo "    Load one:  ./docker-agent/llama-server.sh --load <model-id>"
+    echo "    See ids:   ./docker-agent/llama-server.sh --list"
+  else
+    log "Router is up on $PORT with $loaded model(s) loaded."
+  fi
+
+  # A router bound to 127.0.0.1 answers here but is invisible to the
+  # container - the single most common failure mode of this setup.
+  if ! ss -ltn 2>/dev/null | grep -qE "(0\.0\.0\.0|\*):$PORT " ; then
+    log "WARNING: the router looks bound to loopback only, so the container won't reach it"
+    log "         via host.docker.internal. Restart it with ./docker-agent/llama-server.sh"
+    log "         (which binds 0.0.0.0 by default)."
+  fi
 fi
 
 # --- 3. Build and start ---
@@ -55,6 +71,14 @@ for _ in $(seq 1 15); do
   sleep 1
 done
 docker exec "$CONTAINER_NAME" true >/dev/null 2>&1 || die "Container didn't come up - check 'docker logs $CONTAINER_NAME'."
+
+# --- 4. Prove the container can actually see the host's router ---
+if docker exec "$CONTAINER_NAME" curl -s -m 5 http://host.docker.internal:"$PORT"/models >/dev/null 2>&1; then
+  log "Container can reach the host's router. Good."
+else
+  log "WARNING: the container cannot reach http://host.docker.internal:$PORT from inside."
+  log "         Check the router's bind address (must be 0.0.0.0) and any host firewall."
+fi
 
 echo
 log "Done. The isolated agent container is running."

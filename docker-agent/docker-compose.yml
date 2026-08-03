@@ -5,23 +5,31 @@ services:
     image: pytcr-agent:latest
     container_name: pytcr-agent
     # No host mounts at all - not even read-only ones. The model itself
-    # (native `ollama serve`, Metal-accelerated) is reached over the
-    # network via host.docker.internal, so there's nothing to bind-mount.
+    # (native `llama serve`, CUDA-accelerated) is reached over the network
+    # via host.docker.internal, so there's nothing to bind-mount.
     volumes:
       - agent_state:/root
+    environment:
+      # pi's built-in llama.cpp provider reads this (see its docs/llama-cpp.md).
+      # No API key is needed - pi falls back to the literal "local" when
+      # LLAMA_API_KEY is unset, which llama-server ignores.
+      - LLAMA_BASE_URL=http://host.docker.internal:8080
+    # Docker Desktop (macOS, Windows/WSL2) provides host.docker.internal out
+    # of the box; plain Linux Docker installs generally don't, so map it
+    # explicitly. Harmless where it's already provided.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     # --- isolation hardening (see docker-agent/README.md for what's
     # verified vs not) ---
     cap_drop:
       - ALL
     security_opt:
       - no-new-privileges:true
-    # NOT read-only: opencode's TUI crashes with "Effect.tryPromise /
-    # Unexpected error" under a read-only rootfs (reproduced with cap_drop,
-    # no-new-privileges, and a fresh state volume all still in place - only
-    # removing read_only fixes it). strace didn't surface a single clearly
-    # causal syscall failure, so the exact write path is unconfirmed - the
-    # tradeoff taken here is losing "can't persist changes to the image"
-    # rather than shipping a broken container.
+    # NOT read-only. This was originally required because opencode's TUI
+    # crashed under a read-only rootfs; that finding was about opencode and
+    # has NOT been re-tested against pi. Left off pending a test - an agent
+    # that writes files as part of its job needs a writable filesystem
+    # anyway, and scope is enforced by having no host bind mounts at all.
     mem_limit: "2gb"
     restart: unless-stopped
 

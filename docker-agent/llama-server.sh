@@ -1,58 +1,181 @@
 #!/bin/bash
-# NOT CURRENTLY WORKING - kept for a future retry, not wired into
-# docker-agent/opencode.json (which is back on `ollama serve`). Both models
-# we tried failed to load: glm-4.7-flash's architecture (glm4moelite) isn't
-# recognized by llama.cpp even on the latest Homebrew stable (10050), and
-# qwen3.6's GGUF fails on a metadata-schema mismatch (rope.dimension_sections
-# array length). See docker-agent/README.md's "Known issue" section before
-# retrying - a fix would need fresh GGUFs built against the current
-# llama.cpp version, or building llama.cpp from source/HEAD.
+# Shorthand for launching llama.cpp's router server on the host - the model
+# server that docker-agent's pi container talks to over host.docker.internal.
 #
-# Runs llama.cpp's llama-server natively on the host (Metal-accelerated),
-# loading the GGUF weights straight out of Ollama's blob store - no
-# re-download needed, Ollama's blobs are plain GGUF files.
+# Router mode (no -m/--hf-repo) is deliberate: it discovers every GGUF under
+# --models-dir plus every section of --models-preset, and loads/unloads them
+# on demand. That's what pi's `/llama` command drives, and it's why per-model
+# flags live in presets.ini rather than on this command line.
 #
-# The intent: replace `ollama serve` as the thing docker-agent's opencode
-# container talks to over host.docker.internal, since Ollama's
-# OpenAI-compatible endpoint (/v1/chat/completions) silently drops tool
-# calls under streaming (upstream bug, ollama/ollama#12557) and llama.cpp's
-# own OpenAI-compatible server doesn't have that bug.
+# Usage:
+#   ./llama-server.sh                          # start the router, load nothing
+#   ./llama-server.sh --load <model-id>        # start it and load one model
+#   ./llama-server.sh --list                   # what the running router has
+#   ./llama-server.sh --port 8081
+#   ./llama-server.sh --bind 127.0.0.1         # local only (container can't reach it)
+#   ./llama-server.sh --ctx 65536              # override EVERY model's preset ctx-size
 #
-# Only one model can run at a time (each is 19-23GB; this machine can't
-# hold two in memory at once). Re-run this script with a different model
-# to switch - it's safe to just Ctrl-C the old one first.
+# Context size and GPU layers come from each model's section in
+# --models-preset. --ctx/--ngl shadow them for every model at once, so leave
+# them unset unless that's what you want.
+#
+# Env equivalents: LLAMA_PORT, LLAMA_BIND, LLAMA_CTX, LLAMA_NGL,
+# LLAMA_MODELS_DIR, LLAMA_PRESETS. Flags win over env.
 set -euo pipefail
 
-MODEL="${1:-glm-4.7-flash}"
-CONTEXT="${2:-131072}"
-PORT="${PORT:-8080}"
+PORT="${LLAMA_PORT:-8080}"
+# 0.0.0.0 by default because llama-server's own default (127.0.0.1) is not
+# reachable from a container over host.docker.internal - that binding is the
+# single most common reason the agent container can't see the model. See the
+# LAN-exposure note printed at startup.
+BIND="${LLAMA_BIND:-0.0.0.0}"
+# Deliberately EMPTY by default. A router-level -c / -ngl overrides the
+# per-model ctx-size / n-gpu-layers in presets.ini - verified: with `-c 32768`
+# on the router, a preset asking for ctx-size 262144 spawned its child with
+# --ctx-size 32768 anyway, silently. Presets own per-model flags; these only
+# exist for a deliberate one-off override of every model at once.
+CTX="${LLAMA_CTX:-}"
+NGL="${LLAMA_NGL:-}"
+MODELS_DIR="${LLAMA_MODELS_DIR:-$HOME/models}"
+PRESETS="${LLAMA_PRESETS:-$HOME/.config/llama.cpp/presets.ini}"
+LOAD=""
+LIST_ONLY=0
 
 log() { echo ">> $*"; }
 die() { echo "ERROR: $*" >&2; exit 1; }
 
-command -v llama-server >/dev/null 2>&1 || die "llama-server not found. Install with: brew install llama.cpp"
-command -v ollama >/dev/null 2>&1 || die "ollama not found - it's only used here to resolve the blob path, not to serve."
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --load)       LOAD="${2:-}"; [[ -n "$LOAD" ]] || die "--load needs a model id (see --list)"; shift 2 ;;
+    --list)       LIST_ONLY=1; shift ;;
+    --port)       PORT="${2:?--port needs a value}"; shift 2 ;;
+    --bind)       BIND="${2:?--bind needs a value}"; shift 2 ;;
+    --ctx)        CTX="${2:?--ctx needs a value}"; shift 2 ;;
+    --ngl)        NGL="${2:?--ngl needs a value}"; shift 2 ;;
+    --models-dir) MODELS_DIR="${2:?--models-dir needs a value}"; shift 2 ;;
+    --preset)     PRESETS="${2:?--preset needs a value}"; shift 2 ;;
+    -h|--help)    sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    *)            die "Unknown argument: $1 (see --help)" ;;
+  esac
+done
 
-BLOB="$(ollama show "$MODEL" --modelfile 2>/dev/null | awk '/^FROM/ {print $2}')"
-[[ -n "$BLOB" && -f "$BLOB" ]] || die "Couldn't resolve a GGUF blob for model '$MODEL' (is it pulled? try: ollama pull $MODEL)"
+API="http://127.0.0.1:$PORT"
 
-log "Model:   $MODEL"
-log "Blob:    $BLOB"
-log "Context: $CONTEXT tokens"
-log "Port:    $PORT"
-log ""
-log "--jinja is required for GLM models (without it, tool calls and thinking"
-log "blocks come out malformed) - passed unconditionally since it's harmless"
-log "for qwen too. Binding 0.0.0.0 so the docker-agent container can reach"
-log "this over host.docker.internal (llama-server's default is 127.0.0.1-only,"
-log "which Docker Desktop's host networking can't reach)."
-log ""
+models_json() { curl -s -m 5 "$API/models" 2>/dev/null; }
 
-exec llama-server \
-  -m "$BLOB" \
-  -c "$CONTEXT" \
-  --port "$PORT" \
-  --host 0.0.0.0 \
-  --jinja \
-  --reasoning auto \
-  --alias "$MODEL"
+print_models() {
+  models_json | python3 -c '
+import json, sys
+try:
+    data = json.load(sys.stdin)["data"]
+except Exception:
+    print("  (router not answering)"); sys.exit(0)
+if not data:
+    print("  (no models discovered - check --models-dir and --preset)")
+for m in data:
+    print("  [%8s] %s" % (m["status"]["value"], m["id"]))
+' 2>/dev/null || echo "  (router not answering)"
+}
+
+if [[ $LIST_ONLY -eq 1 ]]; then
+  models_json >/dev/null || die "No router answering on $API - start one first."
+  log "Models known to the router on $API:"
+  print_models
+  exit 0
+fi
+
+command -v llama >/dev/null 2>&1 \
+  || die "'llama' not found on PATH. Build it (see ../README.md) and symlink build/bin/* into ~/.local/bin."
+
+if models_json >/dev/null 2>&1; then
+  log "A server is already answering on $API - not starting a second one."
+  print_models
+  [[ -n "$LOAD" ]] || exit 0
+else
+  [[ -d "$MODELS_DIR" ]] || { log "Creating models dir: $MODELS_DIR"; mkdir -p "$MODELS_DIR"; }
+
+  PRESET_ARGS=()
+  if [[ -f "$PRESETS" ]]; then
+    PRESET_ARGS=(--models-preset "$PRESETS")
+    log "Presets:    $PRESETS"
+  else
+    log "Presets:    (none at $PRESETS - per-model flags will fall back to the defaults below)"
+  fi
+
+  OVERRIDE_ARGS=()
+  [[ -n "$CTX" ]] && OVERRIDE_ARGS+=(-c "$CTX")
+  [[ -n "$NGL" ]] && OVERRIDE_ARGS+=(-ngl "$NGL")
+
+  log "Models dir: $MODELS_DIR"
+  log "Listening:  http://$BIND:$PORT"
+  if (( ${#OVERRIDE_ARGS[@]} )); then
+    log "Override:   ${OVERRIDE_ARGS[*]}  (applies to EVERY model, shadowing its preset)"
+  else
+    log "Context:    per-model, from each preset's ctx-size"
+  fi
+  if [[ "$BIND" == "0.0.0.0" ]]; then
+    log "NOTE: bound to all interfaces so the agent container can reach this via"
+    log "      host.docker.internal. That also exposes it to your LAN - pass"
+    log "      --bind 127.0.0.1 if you're not using the container."
+  fi
+
+  # --no-models-autoload: loading stays explicit (via pi's /llama, --load
+  # here, or POST /models/load). Without it a stray request can pull a
+  # multi-GB model into VRAM as a side effect.
+  llama serve \
+    --models-dir "$MODELS_DIR" \
+    --no-models-autoload \
+    --jinja \
+    --host "$BIND" \
+    --port "$PORT" \
+    "${OVERRIDE_ARGS[@]}" \
+    "${PRESET_ARGS[@]}" &
+  SERVER_PID=$!
+
+  # Hand Ctrl-C to the server rather than orphaning it.
+  trap 'kill "$SERVER_PID" 2>/dev/null || true' INT TERM
+
+  for _ in $(seq 1 60); do
+    models_json >/dev/null 2>&1 && break
+    kill -0 "$SERVER_PID" 2>/dev/null || die "Server exited during startup."
+    sleep 1
+  done
+  models_json >/dev/null 2>&1 || die "Server didn't start answering on $API within 60s."
+  log "Router up (pid $SERVER_PID)."
+fi
+
+if [[ -n "$LOAD" ]]; then
+  log "Loading '$LOAD' (a cold multi-GB load takes minutes - this waits for it)..."
+  curl -s -m 15 -X POST "$API/models/load" \
+    -H 'Content-Type: application/json' \
+    -d "{\"model\":\"$LOAD\"}" >/dev/null \
+    || die "Load request failed. Is '$LOAD' a known model id? Try: $0 --list"
+
+  for _ in $(seq 1 300); do
+    status="$(models_json | python3 -c '
+import json, sys
+want = sys.argv[1]
+try:
+    for m in json.load(sys.stdin)["data"]:
+        if m["id"] == want:
+            print(m["status"]["value"]); break
+    else:
+        print("unknown")
+except Exception:
+    print("unknown")
+' "$LOAD" 2>/dev/null)"
+    [[ "$status" == "loaded" ]] && break
+    [[ "$status" == "unknown" ]] && die "'$LOAD' isn't a model this router knows. Try: $0 --list"
+    sleep 2
+  done
+  [[ "${status:-}" == "loaded" ]] || die "'$LOAD' didn't finish loading in 10 minutes."
+  log "Loaded. Current state:"
+  print_models
+fi
+
+# When this script started the server, stay in the foreground so Ctrl-C
+# stops it; when it attached to an existing one, just exit.
+if [[ -n "${SERVER_PID:-}" ]]; then
+  log "Ctrl-C to stop. Chat with it:  ./docker-agent/chat.sh"
+  wait "$SERVER_PID"
+fi

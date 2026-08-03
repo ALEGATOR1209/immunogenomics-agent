@@ -11,7 +11,7 @@ to disk as usual under <task>/runs/<run_id>/run.txt and run.jsonl - just
 not echoed to this terminal.
 
 Usage (from inside test/):
-    ./run_all.pyuvy
+    ./run_all.py
 """
 import json
 import subprocess

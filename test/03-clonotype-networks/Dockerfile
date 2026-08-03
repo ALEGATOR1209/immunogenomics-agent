@@ -22,5 +22,5 @@ RUN /opt/conda/bin/mamba env create -f /tmp/environment.yml \
 
 # Make the task's conda env (name: pytcr, from environment.yml) the
 # default on PATH for every process in the container, including the
-# bash/python calls opencode's agent makes - no `conda activate` needed.
+# bash/python calls pi's agent makes - no `conda activate` needed.
 ENV PATH=/opt/conda/envs/pytcr/bin:$PATH

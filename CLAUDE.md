@@ -4,13 +4,13 @@ This file provides guidance when working with code in this repository.
 
 ## What this repository is
 
-This is a **skills-and-infrastructure repo** for AIRR-seq analysis, plus a small harness for benchmarking AI coding agents (opencode, running local Ollama models) against these skills. There is no application code to build — the deliverables are Claude/opencode-compatible skill files, Docker isolation setups, and a Python-driven eval harness. Three independent parts:
+This is a **skills-and-infrastructure repo** for AIRR-seq analysis, plus a small harness for benchmarking AI coding agents (pi, running local models served by llama.cpp) against these skills. There is no application code to build — the deliverables are Claude-compatible skill files, Docker isolation setups, and a Python-driven eval harness. Three independent parts:
 
-1. **`skills/`** — Claude Code / opencode skills for TCR-seq analysis (symlinked into `.claude/skills/`, which is gitignored — `skills/` is the single source of truth).
+1. **`skills/`** — Claude Code / pi skills for TCR-seq analysis (symlinked into `.claude/skills/`, which is gitignored — `skills/` is the single source of truth). Both harnesses read the Agent Skills format, so the same directory serves both.
 2. **`docker/` and `docker-agent/`** — two different sandboxed containers for running an LLM agent, built for different tradeoffs (see below).
-3. **`test/`** — a harness that runs opencode inside a container against a fixed task + dataset and grades the output.
+3. **`test/`** — a harness that runs pi inside a container against a fixed task + dataset and grades the output.
 
-Tying them together at the root: `setup.sh` (one-shot bootstrap for a fresh clone) and `README.md` (the human-facing entry point — keep it in sync when the setup flow or harness CLI changes). **`AGENTS.md` is a symlink to this file**, so opencode and Claude Code read the same guidance — edit `CLAUDE.md`, never copy content between the two.
+Tying them together at the root: `setup.sh` (one-shot bootstrap for a fresh clone) and `README.md` (the human-facing entry point — keep it in sync when the setup flow or harness CLI changes). **`AGENTS.md` is a symlink to this file**, so pi and Claude Code read the same guidance — edit `CLAUDE.md`, never copy content between the two.
 
 ## Architecture: two independent skill families
 
@@ -33,23 +33,32 @@ When adding or editing a skill: match the existing style (a `## Setup` section, 
 
 ## Architecture: the two Docker setups
 
-Both live at the repo root, both run opencode in a hardened container (`cap_drop: [ALL]`, `no-new-privileges`, no `docker.sock`), but they isolate **different things** and are not interchangeable:
+Both live at the repo root, both run an agent in a hardened container (`cap_drop: [ALL]`, `no-new-privileges`, no `docker.sock`), but they isolate **different things** and are not interchangeable:
 
-- **`docker/`** — runs Ollama itself inside the container. Fully self-contained, but CPU-only on macOS (Docker Desktop has no Metal passthrough) — see its README's Performance section for the measured cost and the GPU passthrough path for Linux/WSL2+NVIDIA.
-- **`docker-agent/`** — runs only the opencode *client* in the container; the model stays on the host's native `ollama serve` (keeps GPU acceleration) and is reached via `host.docker.internal`. This is what `test/` builds on top of (its images `FROM pytcr-agent:latest`). Model/provider config lives in `docker-agent/opencode.json`. **Known unresolved issue**: Ollama's OpenAI-compatible endpoint silently drops tool calls under streaming ([ollama/ollama#12557](https://github.com/ollama/ollama/issues/12557)), causing agent runs to terminate mid-task with `finish_reason: "stop"` and no error — reproduced on multiple models. A switch to llama.cpp's own `llama-server` was attempted to route around it (script kept at `docker-agent/llama-server.sh` for a future retry) but blocked on GGUF/architecture-version incompatibilities between Ollama's blobs and the installed llama.cpp — see `docker-agent/README.md`'s "Known issue" section for the full story before re-attempting.
+- **`docker/`** — runs Ollama itself inside the container, with opencode as the client. **Not migrated** to pi/llama.cpp; it still works standalone but shares nothing with `docker-agent/` anymore. Fully self-contained, but CPU-only on macOS (Docker Desktop has no Metal passthrough) — see its README's Performance section for the measured cost and the GPU passthrough path for Linux/WSL2+NVIDIA.
+- **`docker-agent/`** — runs only the **pi** client in the container; the model stays on the host under **llama.cpp's router** (`llama serve`, keeps GPU acceleration) and is reached via `host.docker.internal:8080`. This is what `test/` builds on top of (its images `FROM pytcr-agent:latest`). `docker-agent/llama-server.sh` is the shorthand that starts the router. Models are declared in `~/.config/llama.cpp/presets.ini` **on the host**, not in this repo — the container discovers them from the router at runtime.
+
+This setup replaced opencode + Ollama, which had a blocking upstream bug: Ollama's OpenAI-compatible endpoint silently drops tool calls under streaming ([ollama/ollama#12557](https://github.com/ollama/ollama/issues/12557)), ending runs mid-task with `finish_reason: "stop"` and no error, reproduced across several models. llama.cpp's server doesn't have it.
 
 **Known gotchas already root-caused during development** (see each README for detail — don't re-derive these):
-- Ollama loads a model with only a **32768-token context by default**, regardless of what the model architecture supports — invisible until a multi-step agent task exhausts it and the model silently stops producing output (no error). Fix used here: a derived model (`ollama create <name> -f Modelfile` with `PARAMETER num_ctx N`), not a global Ollama config change.
-- A **read-only root filesystem breaks opencode's TUI** (`Effect.tryPromise` / "Unexpected error") — reproduced and isolated to `read_only: true` specifically, independent of `cap_drop`/`no-new-privileges`/volume state. `docker-agent/docker-compose.yml` intentionally does not set it; see its README for the tradeoff.
-- Headless/non-interactive opencode runs need `--dangerously-skip-permissions` (not `--auto` — that flag doesn't exist despite what `--help` might suggest from a different opencode version) or they hang waiting for a permission prompt that never comes.
-- opencode auto-loads Claude Code-format skills from `~/.claude/skills/<name>/SKILL.md` — the container's **home directory**, not the project-relative `.claude/skills` Claude Code itself uses. `test/test.py --skills` bind-mounts `skills/` (read-only) to `/root/.claude/skills` in the container — sourced from `skills/` directly, *not* from the gitignored `.claude/skills` symlink, so the harness works on a fresh clone that never ran `setup.sh`.
+- **Do not use llama.cpp's CUDA 13 prebuilt binaries.** On this hardware (RTX 4070 SUPER, WSL2, driver 591.86) `cublasCreate_v2` fails with `CUBLAS_STATUS_ALLOC_FAILED` on any prompt long enough to take the cuBLAS path (a few hundred tokens), while short prompts succeed and make it look healthy. Independent of free VRAM (fails at 3.6/6.3/7.6 GB free), offload (`-ngl 0` still fails), batch size, mmap, and concurrency. Building the same source against **CUDA 12.6** fixes it. Corollary for any future test: `"hi"` passes on a broken build — always verify with a several-hundred-token prompt.
+- **The `llama-cpp` provider is not built into pi.** It comes from the package `git:github.com/huggingface/pi-llama` (installed in `docker-agent/Dockerfile`). Without it, pi reports "No models available" regardless of `LLAMA_BASE_URL` or `auth.json`. Note the id is `llama-cpp` (hyphen); pi also ships a *different* built-in `llama.cpp` (dot) provider. The package reads `process.env.LLAMA_BASE_URL` directly and needs no credential.
+- **pi's built-in `llama.cpp` provider stores a base URL in `~/.pi/agent/auth.json` that overrides `LLAMA_BASE_URL`** — only affects host installs, not the container (empty volume, no stored credential).
+- **A router bound to `127.0.0.1` is invisible to the container** over `host.docker.internal`. `docker-agent/llama-server.sh` binds `0.0.0.0` by default for exactly this reason; `docker-agent/setup.sh` verifies reachability from inside the container.
+- **Only loaded models are servable** — the router returns `400 "model is not loaded"` otherwise, and `--no-models-autoload` is deliberately always passed so a stray request can't pull a multi-GB model into VRAM.
+- **KV cache scales linearly with `ctx-size`** and competes with `n-cpu-moe` for the same VRAM. The 30B-A3B's KV is 49152 elements/token (48 layers × 4 KV heads × 128), so at its native 262144 context: 25.8 GB at f16, 13.7 GB at q8_0, 7.3 GB at q4_0. Native context therefore needs **q4_0 K/V plus `n-cpu-moe = 48`** (every expert on CPU) — measured 469 t/s prefill, 16.4 t/s generation at 99k tokens, 1872 MiB spare. `q8_0` at 262k simply doesn't fit and fills the card (227 MiB free, unusable).
+- **Keep the KV cache on the GPU.** `--no-kv-offload` fits native context by putting KV in system RAM, but generation collapses to **1.46 t/s** — every token streams the whole cache over PCIe. Context length is nearly free; KV *fidelity* is what you trade.
+- **A router-level `-c`/`-ngl` silently overrides each model's preset.** With `-c 32768` on the router, a preset asking for `ctx-size = 262144` spawned its child with `--ctx-size 32768` and no warning. `docker-agent/llama-server.sh` therefore passes neither unless `--ctx`/`--ngl` is given explicitly.
+- A **read-only root filesystem breaks opencode's TUI** (`Effect.tryPromise` / "Unexpected error") — reproduced and isolated to `read_only: true` specifically. **Not re-tested against pi**; `docker-agent/docker-compose.yml` still doesn't set it.
+- **pi has no permission prompts to bypass** (no built-in sandbox — see its `docs/security.md`), so there's no `--dangerously-skip-permissions` equivalent. Non-interactive modes don't show a trust prompt either; `--approve` trusts project-local resources for one run.
+- **pi auto-discovers skills from `~/.pi/agent/skills/`** — the container's home directory. `test/test.py --skills` bind-mounts `skills/` (read-only) to `/root/.pi/agent/skills` — sourced from `skills/` directly, *not* from the gitignored `.claude/skills` symlink, so the harness works on a fresh clone that never ran `setup.sh`.
 - Docker's `internal: true` network mode blocks `host.docker.internal` too, not just the wider internet — evaluated and rejected as an egress-restriction mechanism for `docker-agent/` (see its README's "Known limitation").
 
 ## Architecture: the eval harness (`test/`)
 
 `test/test.py <task-dir-name> [--skills] [--timeout MINUTES] [--n COUNT] [--model MODEL]` — run from inside `test/` — is the whole harness. It is deliberately a single Python script, not a package; keep changes in that style. `test/run_all.py` is a thin driver on top of it (see below).
 
-Per invocation: builds `pytcr-agent:latest` (once, cached), generates/reuses `<task-dir>/Dockerfile` (extends `pytcr-agent:latest` with a Miniforge/mamba env from `test/environment.yml` — mamba specifically, because plain conda is too slow resolving the bioconda/conda-forge scanpy+scirpy stack), renders `test/SYSTEM.md`'s `<TASK>`/`<OUTPUT_FORMAT>` placeholders from the task's `task.json` (`render_prompt.py` — `<OUTPUT_FORMAT>` is `ground_truth` with every value masked to its zero-equivalent, so the agent sees the required JSON shape but never the answers), runs opencode non-interactively inside a fresh container (`--rm`, brand new every run — no state carries over; memory-capped via `MEMORY_GB`, default 8), extracts `task.ipynb`/`output.json`, then grades against `task.json`'s `grader.config` via `grade.py`.
+Per invocation: builds `pytcr-agent:latest` (once, cached), generates/reuses `<task-dir>/Dockerfile` (extends `pytcr-agent:latest` with a Miniforge/mamba env from `test/environment.yml` — mamba specifically, because plain conda is too slow resolving the bioconda/conda-forge scanpy+scirpy stack), renders `test/SYSTEM.md`'s `<TASK>`/`<OUTPUT_FORMAT>` placeholders from the task's `task.json` (`render_prompt.py` — `<OUTPUT_FORMAT>` is `ground_truth` with every value masked to its zero-equivalent, so the agent sees the required JSON shape but never the answers), runs `pi -p --mode json --approve --no-session --provider llama-cpp --model <id>` inside a fresh container (`--rm`, brand new every run — no state carries over; memory-capped via `MEMORY_GB`, default 8; `LLAMA_BASE_URL` passed in so pi finds the host router), extracts `task.ipynb`/`output.json`, then grades against `task.json`'s `grader.config` via `grade.py`.
 
 Everything from a run lands in **`test/<task-dir>/runs/<timestamp>/`** (per-task, not a shared top-level `runs/`): `prompt.txt` (the exact rendered prompt), `run.jsonl` + `run.txt` (the agent's raw event stream and a readable rendering of it), `outputs/` (the extracted `task.ipynb`/`output.json`), and `eval_result.json`.
 
@@ -63,38 +72,44 @@ Task directory shape (`test/<NN-name>/`): `task.json` (id, task prompt, `grader.
 
 **`starter.ipynb`** (optional): if present, `test.py` copies it into the run's workspace as `task.ipynb` before the container starts, so the agent begins from a partially-built notebook instead of empty — for tasks deliberately scoped to one pipeline stage, assuming an earlier stage already happened (task prompt says "there's a jupyter notebook with ... already set up. Build upon."). Must live at the task directory root, not inside `data/` — that mount is read-only, so a notebook placed there can't be edited in place and the agent would have to discover and copy it out itself first. `04-gene-usage`, `06-clonotype-clustering`, and `07-clonal-expansion` all use this; `06`/`07` split what was originally a single, much longer `03-clonotype-networks` task into two independently-scoped ones (`06` = data loading through clonotype-cluster networks, `07` = clonal expansion/diversity/convergence, picking up from a starter notebook that already has clonotypes and clusters defined) to test whether narrower scope + a starter notebook actually improves completion rate over `03`'s all-in-one version — `03` itself is left as-is for that comparison.
 
-Default model is `host/qwen3.6-128k` (not `host/qwen3.6` — see the context-window gotcha above). `glm-4.7-flash-128k` and `devstral-small-2-128k` were both tried as replacements after qwen3.6 hit the `finish_reason: "stop"`-mid-task failure (pointing to the shared Ollama streaming bug above, not a qwen3.6-specific issue) — glm-4.7-flash got meaningfully deep into real work before failing the same way, but devstral-small-2 regressed badly: it died almost immediately and highly reproducibly (3/3 runs) at the same point, announcing intent to load a skill as plain text and then stopping without ever issuing the tool call, at ~10k tokens with no context pressure. Reverted to qwen3.6-128k as the default; consider `glm-4.7-flash-128k` a reasonable thing to retry, devstral-small-2 not currently viable in this harness. Override per-run with `--model host/<name>` or `MODEL=... ./test.py ...` (flag takes precedence over the env var). `eval_result.json` records which model, harness (`opencode`), and model server (read from `docker-agent/opencode.json`'s provider name) a run actually used.
+**There is no default model.** Model ids are whatever the router reports (e.g. `unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF:Q4_K_XL`), and the router only serves *loaded* models, so any hardcoded id would be wrong most of the time. Resolution order: `--model`, then `MODEL=...`, then — if exactly one model is loaded — that one; otherwise `test.py` dies listing what's available. `eval_result.json` records the model, harness (`pi`), and model server (`llama.cpp`) each run actually used.
 
-**`docker-agent/opencode.json` is the single source of truth for models** — which ones exist and what `limit.context` each claims. The root `setup.sh` reads `num_ctx` for a derived `*-128k` model straight out of it so the two can't drift apart; they must match, or opencode's auto-compaction never fires (it compacts against its declared limit, while the server truncates at the real one). Adding a model means adding it there first.
+**`~/.config/llama.cpp/presets.ini` on the host is the single source of truth for models** — which exist and what flags each loads with (`ctx-size`, `n-cpu-moe`, `cache-type-k/v`, `parallel`). Nothing in this repo declares models anymore; the container discovers them from the router. Adding a model means adding a preset section there, or dropping a GGUF into `~/models`.
+
+**Runs recorded before the pi migration have `"harness": "opencode"`** and are not comparable to later ones — harness, model server, and model all changed at once. The historical opencode-era findings (qwen3.6/glm-4.7-flash/devstral-small-2 all dying mid-task with `finish_reason: "stop"`) were traced to the Ollama streaming bug above, not to the models, so they say little about behaviour under llama.cpp.
 
 Gitignored, and therefore absent on a fresh clone: `.claude` (hence the `setup.sh` symlink step), `data` (every task's dataset — supplied separately), `test/*/runs`, `test/logs`, `test/notebooks`, `test/results`, `.vscode`, and all `*.ipynb`. These are local run history/scratch/inputs, not source.
 
 ## Common commands
 
 ```bash
-# Fresh-clone bootstrap (host models + agent container + gitignored bits)
-./setup.sh                                 # provisions host/qwen3.6-128k, builds the agent container, links .claude/skills -> skills/
-./setup.sh --models glm-4.7-flash-128k     # a different model (must be declared in docker-agent/opencode.json)
-./setup.sh --all-models                    # every *-128k model in opencode.json
+# Fresh-clone bootstrap (host model-server checks + agent container + gitignored bits)
+./setup.sh                                 # checks the llama.cpp router, builds the agent container, links .claude/skills -> skills/
+./setup.sh --models unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF:Q4_K_XL   # have the router fetch a model from HF
 ./setup.sh --skip-models                   # container + skills symlink only
 ./setup.sh --skip-container                # host side only, no Docker needed
-./setup.sh --with-host-opencode            # also npm-install opencode on the host (normally unnecessary)
+./setup.sh --with-host-pi                  # also npm-install pi + the pi-llama provider on the host
 
-# Isolated Ollama-in-container setup
+# Host model server (llama.cpp router)
+./docker-agent/llama-server.sh --list                # what the router knows, with load state
+./docker-agent/llama-server.sh --load <model-id>     # start it and load one model
+./docker-agent/llama-server.sh --port 8081 --bind 127.0.0.1   # --ctx only to override every preset
+
+# Isolated Ollama-in-container setup (NOT migrated - still opencode + Ollama)
 ./docker/setup.sh                          # build + start + memory check
 ./docker/chat.sh [model]                   # interactive REPL
 
-# Isolated opencode client, native host Ollama
+# Isolated pi client, native host llama.cpp
 ./docker-agent/setup.sh
-./docker-agent/chat.sh [host/model]
+./docker-agent/chat.sh [model-id]          # defaults to whichever model is loaded
 
 # Eval harness (run from inside test/)
 cd test
 ./test.py 01-data-loading                  # no skills mounted
-./test.py 01-data-loading --skills         # mounts skills/ read-only at the container's ~/.claude/skills
+./test.py 01-data-loading --skills         # mounts skills/ read-only at the container's ~/.pi/agent/skills
 ./test.py 01-data-loading --timeout 30 --n 3   # 30-minute timeout, 3 repeated runs
-MODEL=host/qwen3.5 ./test.py 01-data-loading
-./test.py 01-data-loading --model host/qwen3.5    # equivalent, flag takes precedence over MODEL
+MODEL='ggml-org/Qwen3.6-35B-A3B-GGUF:Q4_K_M' ./test.py 01-data-loading
+./test.py 01-data-loading --model 'ggml-org/Qwen3.6-35B-A3B-GGUF:Q4_K_M'   # flag takes precedence over MODEL
 MEMORY_GB=16 ./test.py 01-data-loading            # raise the container memory cap (default 8)
 ./run_all.py                                      # every task, 5x with skills + 5x without, 60m cap each
 python3 grade.py <task.json> <output.json> [duration_seconds] [skills]   # re-grade a saved answer

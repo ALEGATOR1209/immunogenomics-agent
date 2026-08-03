@@ -1,13 +1,12 @@
 # docker-agent
 
-A sandboxed container for running [opencode](https://opencode.ai) against a
-locally-served LLM, without giving the agent any access to the host
+A sandboxed container for running [pi](https://github.com/badlogic/pi-mono)
+against a locally-served LLM, without giving the agent any access to the host
 filesystem, other containers, or the Docker daemon.
 
-The model itself runs natively on the host via `ollama serve`, so it keeps
-full GPU acceleration. Only the agent process — the part that will eventually
-have file and tool access — runs inside the sandbox. The two talk to each
-other over the network.
+The model itself runs natively on the host via llama.cpp's router server, so
+it keeps full GPU acceleration. Only the agent process — the part with file
+and shell access — runs inside the sandbox. The two talk over the network.
 
 This is one of two isolation setups in this repository; see
 [Comparison with `docker/`](#comparison-with-docker) for when to use which.
@@ -16,154 +15,172 @@ This is one of two isolation setups in this repository; see
 
 A language model on its own can only produce text — it can't touch a
 filesystem or run a command. The thing that actually needs sandboxing is the
-agent harness wrapping it: the part with tool-calling, file access, and shell
-execution. Isolating the client rather than the model server has two
-consequences:
+agent harness wrapping it: tool-calling, file access, shell execution.
+Isolating the client rather than the model server has two consequences:
 
-- The model keeps whatever hardware acceleration the host provides (Metal on
-  macOS, CUDA on Linux/WSL2 with an NVIDIA GPU) instead of being CPU-bound
-  inside a container.
+- The model keeps whatever hardware acceleration the host provides (CUDA on
+  Linux/WSL2 with an NVIDIA GPU) instead of being CPU-bound in a container.
 - Sandboxing effort goes where the actual risk is, and stays in place as more
   tools get added to the agent later.
 
 ## Prerequisites
 
-- [Docker](https://www.docker.com/products/docker-desktop/) or a compatible
-  container runtime, with Compose v2
-- [Ollama](https://ollama.com) installed and serving on the host:
+- Docker (or a compatible runtime) with Compose v2.
+- A working `llama` binary on the host, with `llama-server`/`llama` on PATH.
 
-  ```bash
-  ollama serve
-  ollama pull qwen3.6
-  ```
+  **Build it from source — do not use the prebuilt CUDA 13 binaries.** On this
+  hardware (RTX 4070 SUPER, WSL2, driver 591.86) the cu13 prebuilt fails
+  `cublasCreate_v2` with `CUBLAS_STATUS_ALLOC_FAILED` on *any* prompt long
+  enough to take the cuBLAS path — a few hundred tokens — while short prompts
+  succeed and make it look healthy. It is independent of free VRAM, offload
+  (`-ngl 0` still fails), batch size, mmap, and concurrency. Building the same
+  source against **CUDA 12.6** fixes it outright. See the repo-root README for
+  the build recipe.
 
-  Then derive the 128k-context variant this setup defaults to (see
-  [the context window note](#configuration) for why) — or just run the
-  repo-root [`../setup.sh`](../setup.sh), which does the pull, the derive,
-  and everything below in one go:
-
-  ```bash
-  printf 'FROM qwen3.6:latest\nPARAMETER num_ctx 131072\n' > Modelfile
-  ollama create qwen3.6-128k -f Modelfile
-  ```
+- At least one GGUF model, either under `~/models` or declared in
+  `~/.config/llama.cpp/presets.ini`.
 
 ## Quick start
 
 ```bash
-./docker-agent/setup.sh
+./docker-agent/llama-server.sh --load <model-id>   # host: start the router, load a model
+./docker-agent/setup.sh                            # build + start the container
+./docker-agent/chat.sh                             # interactive session
 ```
 
-This builds the image, starts the container, and confirms it can reach the
-host's Ollama server. Then:
-
-```bash
-./docker-agent/chat.sh                        # interactive session, default: host/qwen3.6-128k
-./docker-agent/chat.sh host/glm-4.7-flash-128k # or any other configured model
-```
+`setup.sh` verifies from *inside* the container that it can actually reach the
+host's router, which is the failure this setup hits most often.
 
 For scripting or automated testing:
 
 ```bash
-docker exec pytcr-agent opencode run --model host/qwen3.6-128k "your prompt"
+docker exec pytcr-agent pi -p "your prompt" \
+  --provider llama-cpp --model <model-id>
 ```
+
+## `llama-server.sh` — the model server
+
+Starts llama.cpp in **router mode**, which discovers every GGUF under
+`--models-dir` plus every section of `--models-preset` and loads/unloads them
+on demand. That's what pi's `/llama` command drives, and it's why per-model
+flags belong in `presets.ini` rather than on the command line.
+
+```bash
+./llama-server.sh                        # start, load nothing
+./llama-server.sh --load <model-id>      # start and load one model (waits for it)
+./llama-server.sh --list                 # what a running router knows
+./llama-server.sh --port 8081
+./llama-server.sh --bind 127.0.0.1       # local only - container can NOT reach this
+./llama-server.sh --ctx 65536            # override EVERY model's preset ctx-size
+```
+
+Env equivalents: `LLAMA_PORT`, `LLAMA_BIND`, `LLAMA_CTX`, `LLAMA_NGL`,
+`LLAMA_MODELS_DIR`, `LLAMA_PRESETS`. Flags win. Re-running while a server is
+already up attaches to it instead of starting a second one.
+
+**`--ctx`/`--ngl` are deliberately unset by default.** A router-level `-c`
+silently overrides the per-model `ctx-size` in `presets.ini`: with `-c 32768`
+on the router, a preset asking for `ctx-size = 262144` spawned its child with
+`--ctx-size 32768` and no warning. Per-model flags belong in the preset.
+
+**It binds `0.0.0.0` by default.** llama-server's own default is
+`127.0.0.1`, which a container cannot reach over `host.docker.internal` — the
+single most common reason the agent can't see the model. The tradeoff is LAN
+exposure; pass `--bind 127.0.0.1` when you're not using the container.
+
+**`--no-models-autoload` is always passed**, so loading stays explicit. Without
+it a stray request can pull a multi-GB model into VRAM as a side effect.
 
 ## Configuration
 
-Models are declared in [`opencode.json`](./opencode.json) under a provider
-named `host`, pointing at the host's Ollama server:
+There is no model config in this directory. `~/.config/llama.cpp/presets.ini`
+on the host is the single source of truth for which models exist and what
+flags each one loads with; the container discovers them from the router at
+runtime. A preset looks like:
 
-```jsonc
-{
-  "provider": {
-    "host": {
-      "npm": "@ai-sdk/openai-compatible",
-      "options": { "baseURL": "http://host.docker.internal:11434/v1" },
-      "models": { "qwen3.6": { "name": "qwen3.6-35b" } }
-    }
-  }
-}
+```ini
+[unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF:Q4_K_XL]
+jinja = 1
+ctx-size = 262144       # the model's native context
+hf-repo = unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF:Q4_K_XL
+n-gpu-layers = 99
+n-cpu-moe = 48          # ALL experts to CPU, freeing VRAM for the KV cache
+cache-type-k = q4_0
+cache-type-v = q4_0
+parallel = 1
 ```
 
-Add an entry per model you want available, then rebuild
-(`docker compose -f docker-agent/docker-compose.yml up -d --build`). Models
-are referenced as `host/<name>`, matching the provider name.
+### Sizing the KV cache against `n-cpu-moe`
 
-**Context window note:** Ollama defaults a model's loaded context window to
-32768 tokens regardless of what the model architecture actually supports —
-visible via `ollama ps`'s `CONTEXT` column, and as the `-c` flag on the
-underlying `llama-server` process (`ps aux | grep llama-server`). Multi-step
-agentic tasks that inspect real data can exhaust 32768 tokens of cumulative
-tool-call history before finishing, with no error — the model just silently
-stops producing useful output once the context fills. Every `*-128k` entry
-in `opencode.json` is a derived model (`ollama create qwen3.6-128k -f
-Modelfile` with `FROM qwen3.6:latest` + `PARAMETER num_ctx 131072`) for
-exactly this case — same weights, no re-download, only the loaded context
-window differs. Memory cost is small (measured ~1GB extra RSS for 4x the
-context). Use `host/qwen3.6-128k` (the default here and in `test/`) rather
-than `host/qwen3.6` for anything involving nontrivial tool use.
+Both compete for the same 12 GB. This model's KV cost is fixed by its shape
+(48 layers × 4 KV heads × 128 dim = 49152 elements/token):
 
-Even at 128k, a long multi-step task can still fill the window — opencode
-has automatic compaction (`compaction.auto`, on by default) meant to
-summarize and free up space before that happens, but it only triggers if
-opencode knows the model's context size. For custom `openai-compatible`
-models this isn't inferred from anywhere, so each model entry above
-declares `"limit": { "context": N, "output": N }` matching its Modelfile's
-`num_ctx` — without it, auto-compaction never fires and the run instead
-rides straight to the hard wall (observed: token count climbs to exactly
-`num_ctx` and the model silently stops producing output, same failure mode
-as the default-32768 case above, just at whatever ceiling was configured).
+| KV type | per token | at 131072 | at 262144 |
+|---|---|---|---|
+| f16 | 96 KB | 12.9 GB | 25.8 GB |
+| q8_0 | 51 KB | 6.8 GB | 13.7 GB |
+| q4_0 | 27 KB | 3.6 GB | 7.3 GB |
 
-### Known issue — Ollama's OpenAI-compat endpoint drops tool calls under streaming
+So native context is only reachable with `q4_0` K/V, and only if the weights
+get out of the way (`n-cpu-moe = 48` puts every expert on the CPU). Measured
+at ~99k tokens of actual context on a 12 GB RTX 4070 SUPER:
 
-Repeated eval-harness runs (see `test/03-clonotype-networks`) have hit a
-failure independent of model or prompt/skill content: partway through a
-task — consistently right after an ordinary tool error the model needed to
-recover from, e.g. a Python `SyntaxError` — the turn ends abruptly with
-`finish_reason: "stop"`, no tool call, no error, session just over. This
-reproduced on **both** qwen3.6 (reasoning channel leaking literal
-`<|mask_start|><think>` tokens) and glm-4.7-flash (a malformed
-`<tool_call>`-tag leak) — two structurally different models, same failure
-shape, different leak signatures. Root cause: this is a documented,
-maintainer-acknowledged upstream Ollama bug
-([ollama/ollama#12557](https://github.com/ollama/ollama/issues/12557)) —
-Ollama's OpenAI-compatible endpoint (`/v1/chat/completions`, exactly what
-`opencode.json` is pointed at) silently drops tool calls under streaming.
-Ollama's *native* `/api/chat` endpoint doesn't have this bug, but opencode
-has no built-in native-Ollama provider.
+| ctx | KV | where | `n-cpu-moe` | free VRAM | prefill | generation |
+|---|---|---|---|---|---|---|
+| 262144 | q8_0 | **RAM** (`-nkvo`) | 32 | 2745 MiB | 363 t/s | **1.46 t/s** |
+| 131072 | q4_0 | GPU | 40 | 2541 MiB | 523 t/s | 18.4 t/s |
+| 131072 | q8_0 | GPU | 48 | 2491 MiB | 490 t/s | 16.1 t/s |
+| **262144** | **q4_0** | **GPU** | **48** | **1872 MiB** | 469 t/s | **16.4 t/s** |
 
-**We tried switching to llama.cpp's own `llama-server` to route around this
-entirely (cutting Ollama's serving path out, reusing its already-downloaded
-GGUF blobs directly — `~/.ollama/models/blobs/sha256-...` are plain GGUF
-files, confirmed via the `GGUF` magic number) — it didn't work, for reasons
-independent of the tool-calling bug itself:**
-- `glm-4.7-flash`'s architecture (`glm4moelite`) isn't recognized by
-  llama.cpp, even on the latest Homebrew-packaged stable release (`brew
-  upgrade llama.cpp` to 10050 didn't help).
-- `qwen3.6`'s GGUF fails on a metadata-schema mismatch: `error loading model
-  hyperparameters: key qwen35moe.rope.dimension_sections has wrong array
-  length; expected 4, got 3` — the architecture is recognized, but this
-  specific blob's metadata was written by a different llama.cpp/converter
-  version than what's installed now.
+**Keep the KV cache on the GPU.** `--no-kv-offload` also fits native context
+by putting the cache in system RAM, but generation collapses to 1.46 t/s:
+every generated token streams the entire cache across PCIe (~9 GB per token
+at 181k context). Length itself is nearly free — native context runs at the
+same speed as half context; what you actually trade is KV *fidelity*.
 
-Both are real, verified blockers (not something to retry past) — Ollama's
-distributed GGUF blobs are structurally valid GGUF files but aren't
-guaranteed metadata-schema-compatible with an independently-versioned
-llama.cpp build. A retry would need either freshly-converted GGUFs from a
-source that targets the current llama.cpp version (e.g. Unsloth's
-Hugging Face GGUF repos) or building llama.cpp from source/HEAD past what
-Homebrew packages — neither attempted yet. Until then, this setup is back on
-`ollama serve`, living with the streaming-tool-call bug (mitigated only by
-`test/SYSTEM.md`'s explicit "don't rewrite the whole notebook after one
-error" instruction, which reduces how often the agent lands on the exact
-recovery-after-error moment that seems to trigger it — not a real fix).
-Also worth noting for a future attempt: `--jinja` is mandatory for GLM
-models on `llama-server` (without it, tool calls/thinking blocks come out
-malformed — a different bug, same symptom class as the one above).
+At shorter contexts, where KV is small, `n-cpu-moe` is purely a speed knob —
+at 32k with `q8_0` KV: 36 → 639/35.1 t/s, 32 → 830/40.4, 28 → 898/42.0,
+24 → 954/44.1 (but only 204 MiB spare, inside the range the Windows desktop
+fluctuates by).
 
-`host.docker.internal` is Docker's standard container→host DNS name and
-works out of the box on Docker Desktop (macOS, Windows/WSL2). On Linux you
-may need `--add-host=host.docker.internal:host-gateway`, already set for
-Docker Desktop but not always for other Linux Docker installs.
+### The provider package is required
+
+The `llama-cpp` provider is **not** built into pi. It comes from
+`git:github.com/huggingface/pi-llama`, installed in the Dockerfile. Without
+it, `pi --list-models` reports "No models available" regardless of
+`LLAMA_BASE_URL` or `auth.json` — verified on a clean pi home, including with
+both env vars set and with a hand-seeded credential.
+
+Two details that follow from how that package works:
+
+- The provider id is **`llama-cpp`** (hyphen). pi ships its own separate
+  built-in `llama.cpp` (dot) extension; they are different providers with
+  different behaviour, and passing the wrong one gives
+  `Unknown provider "llama-cpp"` or a silent fallback.
+- It reads `process.env.LLAMA_BASE_URL` directly (default
+  `http://localhost:8080`) and needs no credential. `docker-compose.yml` sets
+  it to `http://host.docker.internal:8080`.
+
+Because /root is a named volume, the package is installed at build time under
+a staging HOME (`/opt/pi-home`) and copied across on first boot by
+`entrypoint.sh`. Existing settings are never overwritten; run
+`docker compose down -v` to pick up an updated package from a rebuilt image.
+
+### Only loaded models are usable
+
+The router serves what's resident. Requesting an unloaded model returns
+`400 {"message":"model is not loaded"}`. `chat.sh` defaults to whichever model
+is currently loaded and tells you how to load one if none is. Inside a
+session, `/llama` loads and unloads.
+
+### If you run pi on the host too
+
+pi's *built-in* `llama.cpp` extension stores a base URL in
+`~/.pi/agent/auth.json` when you `/login`, and **that stored value overrides
+the `LLAMA_BASE_URL` environment variable** (`credentialServerUrl(credential)
+?? env` in its `provider.js`). A host pi pointed at a stale port will silently
+keep using it. The container is unaffected — it starts with an empty volume
+and no stored credential.
 
 ## Isolation model
 
@@ -174,45 +191,44 @@ Docker Desktop but not always for other Linux Docker installs.
 | Can't reach the Docker daemon or other containers | No `docker.sock` mount |
 | Config/cache state | A container-only named volume, discarded with `docker compose down -v` |
 
-**The root filesystem is writable, not read-only.** A `read_only: true` root
-filesystem reliably crashed opencode's TUI (`Effect.tryPromise / Unexpected
-error`) — reproduced with a fresh state volume and every other hardening
-flag still in place, isolated by removing flags one at a time until only
-`read_only` remained the differentiator; `strace` didn't surface one clearly
-causal failing syscall. This turned out not to matter much: the agent is
-meant to run commands and write files as part of its normal job, so a
-container-local writable filesystem isn't something to lock down, it's a
-requirement. What's still enforced is *scope* — there are no host bind
-mounts, so writes stay inside the container's own filesystem (image layers
-+ the state volume) and never touch the host. A deliberately scoped,
-writable workspace mount is the natural next step for giving the agent real
-project files to work with.
+**The root filesystem is writable, not read-only.** This dates from the
+opencode era, where `read_only: true` reliably crashed opencode's TUI
+(`Effect.tryPromise / Unexpected error`), isolated by removing hardening flags
+one at a time until only `read_only` remained the differentiator. **That
+finding has not been re-tested against pi** — it may well work now. It matters
+less than it sounds: an agent that writes files as part of its job needs a
+writable filesystem anyway, and scope is enforced by having no host bind
+mounts at all, so writes stay inside the container.
 
 **Known limitation — network egress is not restricted.** The container can
-reach the open internet, not just the host's Ollama server. Docker's
-`internal: true` network mode was evaluated as a way to close this, but it
-also blocks `host.docker.internal`, which this setup depends on — so it
-isn't usable here without further work (e.g. a proxy sidecar with an
-allowlist).
+reach the open internet, not just the host's model server. Docker's
+`internal: true` network mode was evaluated and rejected: it also blocks
+`host.docker.internal`, which this setup depends on. Closing this would need
+something like a proxy sidecar with an allowlist.
 
-## Performance
+`host.docker.internal` is provided out of the box by Docker Desktop (macOS,
+Windows/WSL2). `docker-compose.yml` also maps it explicitly via `extra_hosts:
+host-gateway` for plain Linux Docker installs, where it otherwise doesn't
+exist.
 
-Isolating the agent rather than the model avoids the CPU-only penalty that
-running Ollama itself in a container incurs on macOS (see
-[`docker/README.md`](../docker/README.md#performance)). Measured on a 35B
-Q4_K_M model with GPU acceleration confirmed active on the host
-(`ollama ps` reporting `100% GPU`):
+## Relationship to `test/`
 
-| Call path | Time (warm) |
-|---|---|
-| Direct Ollama API call | ~3.5s |
-| `opencode run` inside this container | ~19s |
-| `opencode run` natively on the host, no container | ~44s (single sample) |
+The eval harness under `test/` builds `FROM pytcr-agent:latest` and has been
+migrated alongside this directory: it invokes
+`pi -p --mode json --provider llama-cpp --model <id>` and parses pi's event
+stream. Two consequences worth knowing:
 
-The overhead between a bare API call and an opencode session comes from
-opencode itself — system prompt and tool schemas sent on every turn, plus
-the model's own reasoning trace — not from containerization. The sandbox
-adds no measurable cost of its own.
+- **Model ids are router ids now** (`unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF:Q4_K_XL`),
+  not `host/<name>`. There's no hardcoded default: `test.py` uses `--model`,
+  then `MODEL`, then the router's single loaded model, and fails with the list
+  if that's ambiguous.
+- **Skills mount at `/root/.pi/agent/skills`** (pi's global auto-discovery
+  location) rather than `/root/.claude/skills`.
+
+`docker-agent/opencode.json` is gone; nothing reads it. Runs recorded before
+the migration have `"harness": "opencode"` in their `eval_result.json` and are
+not comparable to later ones — the harness, the model server, and the prompt
+scaffold all changed at once.
 
 ## Comparison with `docker/`
 
@@ -220,5 +236,5 @@ adds no measurable cost of its own.
 |---|---|---|
 | What's isolated | The model itself | The agent/client |
 | Model acceleration | CPU-only on macOS; GPU passthrough on Linux/WSL2 with an NVIDIA GPU | Whatever the host natively supports |
-| Host dependencies | None beyond Docker | A running `ollama serve` on the host |
-| Best for | Untrusted model files; Linux/WSL2 with GPU passthrough | macOS, or anywhere the model should keep native acceleration |
+| Host dependencies | None beyond Docker | A running llama.cpp router on the host |
+| Best for | Untrusted model files; Linux/WSL2 with GPU passthrough | Keeping native GPU acceleration |

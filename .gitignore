@@ -1,5 +1,6 @@
 .vscode
 .claude
+.agents
 data
 *.ipynb
 test/results

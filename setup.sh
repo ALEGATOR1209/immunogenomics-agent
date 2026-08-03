@@ -1,21 +1,25 @@
 #!/bin/bash
-# One-shot bootstrap for a fresh clone: host-side model provisioning +
-# the agent container + the bits that are gitignored and therefore absent
-# after `git clone`. Safe to re-run - every step is a no-op if already done.
+# One-shot bootstrap for a fresh clone: host-side model server checks + the
+# agent container + the bits that are gitignored and therefore absent after
+# `git clone`. Safe to re-run - every step is a no-op if already done.
 #
 # Usage:
-#   ./setup.sh                                   # provision the harness default model (qwen3.6-128k)
-#   ./setup.sh --models qwen3.6-128k glm-4.7-flash-128k
-#   ./setup.sh --all-models                      # every *-128k model declared in docker-agent/opencode.json
+#   ./setup.sh                                   # check the host model server, build the container, link skills
+#   ./setup.sh --models unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF:Q4_K_XL
 #   ./setup.sh --skip-models                     # container + skills symlink only
 #   ./setup.sh --skip-container                  # host side only (no Docker needed)
-#   ./setup.sh --with-host-opencode              # also npm-install opencode on the host (normally unnecessary)
+#   ./setup.sh --with-host-pi                    # also npm-install pi on the host (normally unnecessary)
+#
+# Models are served by llama.cpp's router on the host, not by Ollama. Which
+# models exist and what flags each loads with is declared in
+# ~/.config/llama.cpp/presets.ini (or any GGUF under ~/models) - see
+# docker-agent/README.md.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-OPENCODE_JSON="$SCRIPT_DIR/docker-agent/opencode.json"
 AGENT_DOCKERFILE="$SCRIPT_DIR/docker-agent/Dockerfile"
-DEFAULT_MODELS=(qwen3.6-128k)
+LLAMA_PORT="${LLAMA_PORT:-8080}"
+API="http://127.0.0.1:$LLAMA_PORT"
 
 log() { echo ">> $*"; }
 warn() { echo ">> WARNING: $*" >&2; }
@@ -23,117 +27,78 @@ die() { echo "ERROR: $*" >&2; exit 1; }
 
 # --- argument parsing ---
 MODELS=()
-ALL_MODELS=0
 SKIP_MODELS=0
 SKIP_CONTAINER=0
-HOST_OPENCODE=0
+HOST_PI=0
 
 while (( $# )); do
   case "$1" in
     --models)
       shift
-      # everything up to the next flag is a model name
       while (( $# )) && [[ "$1" != --* ]]; do MODELS+=("$1"); shift; done
       ;;
-    --all-models)     ALL_MODELS=1; shift ;;
     --skip-models)    SKIP_MODELS=1; shift ;;
     --skip-container) SKIP_CONTAINER=1; shift ;;
-    --with-host-opencode) HOST_OPENCODE=1; shift ;;
+    --with-host-pi)   HOST_PI=1; shift ;;
     -h|--help)
-      sed -n '2,12p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+      sed -n '2,16p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
       exit 0
       ;;
     *) die "Unknown argument: $1 (try --help)" ;;
   esac
 done
 
-command -v python3 >/dev/null 2>&1 || die "python3 isn't on PATH - needed to read docker-agent/opencode.json and to run test/test.py."
-[[ -f "$OPENCODE_JSON" ]] || die "Missing $OPENCODE_JSON - are you running this from a complete clone?"
+command -v python3 >/dev/null 2>&1 || die "python3 isn't on PATH - needed to talk to the model router and to run test/test.py."
 
-# opencode.json is the single source of truth for which models exist and
-# what context window each one claims, so the Modelfile's num_ctx and
-# opencode's declared `limit.context` can't drift apart (they must match,
-# or auto-compaction never fires - see docker-agent/README.md).
-model_context() {
-  python3 -c "
-import json, sys
-cfg = json.load(open('$OPENCODE_JSON'))
-m = cfg['provider']['host']['models'].get(sys.argv[1])
-print(m['limit']['context'] if m and 'limit' in m else '')
-" "$1"
-}
-
-all_derived_models() {
-  python3 -c "
-import json
-cfg = json.load(open('$OPENCODE_JSON'))
-print('\n'.join(n for n in cfg['provider']['host']['models'] if n.endswith('-128k')))
-"
-}
+router_up() { curl -s -m 3 "$API/models" >/dev/null 2>&1; }
 
 # =====================================================================
-# 1. Host models (Ollama)
+# 1. Host model server (llama.cpp)
 # =====================================================================
 if (( SKIP_MODELS )); then
-  log "Skipping model provisioning (--skip-models)."
+  log "Skipping model-server checks (--skip-models)."
 else
-  if (( ALL_MODELS )); then
-    mapfile -t MODELS < <(all_derived_models)
-  elif (( ${#MODELS[@]} == 0 )); then
-    MODELS=("${DEFAULT_MODELS[@]}")
+  if ! command -v llama >/dev/null 2>&1; then
+    warn "'llama' isn't on PATH. Build llama.cpp and link its binaries, e.g.:"
+    echo "     cmake -S <llama.cpp> -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \\"
+    echo "           -DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES=<your-arch> -DLLAMA_CURL=ON"
+    echo "     cmake --build build -j\"\$(nproc)\""
+    echo "     ln -s <llama.cpp>/build/bin/llama* ~/.local/bin/"
+    echo
+    echo "   Build against CUDA 12.x, not 13.x: the CUDA 13 prebuilts fail"
+    echo "   cublasCreate_v2 on any prompt long enough to take the cuBLAS path."
+    echo "   See docker-agent/README.md."
+  else
+    log "llama binary: $(command -v llama) ($(llama --version 2>&1 | head -1))"
   fi
 
-  command -v ollama >/dev/null 2>&1 || die "Ollama isn't installed. Linux/WSL2: curl -fsSL https://ollama.com/install.sh | sh   macOS: brew install ollama (or https://ollama.com/download). Then re-run this script."
-
-  # The models below are created through the server, not just on disk, so
-  # it has to actually be up before we start.
-  if ! curl -s -m 3 http://localhost:11434/api/tags >/dev/null 2>&1; then
-    log "Nothing answering on localhost:11434 - starting 'ollama serve' in the background..."
-    nohup ollama serve >/tmp/ollama-serve.log 2>&1 &
-    for _ in $(seq 1 30); do
-      curl -s -m 2 http://localhost:11434/api/tags >/dev/null 2>&1 && break
-      sleep 1
-    done
-    curl -s -m 3 http://localhost:11434/api/tags >/dev/null 2>&1 \
-      || die "Ollama still isn't answering on 11434 after 30s - see /tmp/ollama-serve.log, start it yourself with 'ollama serve', and re-run."
+  if router_up; then
+    log "Model router answering on $API:"
+    curl -s -m 5 "$API/models" | python3 -c '
+import json, sys
+try:
+    data = json.load(sys.stdin)["data"]
+except Exception:
+    print("     (unreadable response)"); sys.exit(0)
+if not data:
+    print("     (no models discovered)")
+for m in data:
+    print("     [%8s] %s" % (m["status"]["value"], m["id"]))
+' || true
+  else
+    warn "No model router answering on $API. Start one with:"
+    echo "     ./docker-agent/llama-server.sh --load <model-id>"
   fi
-  log "Ollama is serving on localhost:11434."
 
-  have_model() {
-    ollama list | awk 'NR>1{print $1}' | grep -qxE "$1|$1:latest"
-  }
-
+  # Downloading is done by the router itself (POST /models with a HF repo
+  # id), so it has to be running for this.
   for model in "${MODELS[@]}"; do
-    ctx="$(model_context "$model")"
-    [[ -n "$ctx" ]] || die "'$model' has no entry (with a limit.context) in $OPENCODE_JSON. Add one first - opencode can't reference a model that isn't declared there."
-
-    if have_model "$model"; then
-      log "$model already present - skipping."
-      continue
-    fi
-
-    if [[ "$model" == *-128k ]]; then
-      base="${model%-128k}"
-      # Derived model: same weights as the base, only the loaded context
-      # window differs. Ollama caps a loaded model at 32768 tokens
-      # regardless of architecture support, and blows past it silently -
-      # see docker-agent/README.md's context window note.
-      if ! have_model "$base"; then
-        log "Pulling base model '$base' (this is the big download)..."
-        ollama pull "$base" || die "Couldn't pull '$base'. If it's local-only, make sure it's under ~/.ollama/models and re-run."
-      fi
-      modelfile="$(mktemp)"
-      printf 'FROM %s:latest\nPARAMETER num_ctx %s\n' "$base" "$ctx" >"$modelfile"
-      log "Creating '$model' from '$base' with num_ctx=$ctx (no re-download - same blobs)..."
-      ollama create "$model" -f "$modelfile" || { rm -f "$modelfile"; die "'ollama create $model' failed."; }
-      rm -f "$modelfile"
-      ollama show "$model" --parameters 2>/dev/null | grep -q "num_ctx *$ctx" \
-        || warn "'$model' was created but doesn't report num_ctx=$ctx - check 'ollama show $model --parameters'."
-    else
-      log "Pulling '$model'..."
-      ollama pull "$model" || die "Couldn't pull '$model'."
-    fi
-    log "$model ready."
+    router_up || die "--models needs a running router. Start it: ./docker-agent/llama-server.sh"
+    log "Asking the router to fetch '$model' (large download; skipped if already cached)..."
+    curl -s -m 3600 -X POST "$API/models" \
+      -H 'Content-Type: application/json' \
+      -d "{\"model\":\"$model\"}" >/dev/null \
+      || warn "Fetch request for '$model' failed - check the id (owner/repo[:quant])."
   done
 fi
 
@@ -167,18 +132,22 @@ else
 fi
 
 # =====================================================================
-# 4. Optional: opencode on the host
+# 4. Optional: pi on the host
 # =====================================================================
-# The container already ships opencode - a host install is only needed for
-# running it natively outside the sandbox. Pinned to the same version the
-# container uses so benchmark output isn't confounded by version drift.
-if (( HOST_OPENCODE )); then
-  pinned="$(grep -o 'opencode-ai@[0-9.]*' "$AGENT_DOCKERFILE" | head -1)"
+# The container already ships pi - a host install is only needed for running
+# it natively outside the sandbox. Pinned to the same version the container
+# uses so benchmark output isn't confounded by version drift.
+if (( HOST_PI )); then
+  pinned="$(grep -o '@earendil-works/pi-coding-agent@[0-9.]*' "$AGENT_DOCKERFILE" | head -1)"
   if command -v npm >/dev/null 2>&1 && npm --version >/dev/null 2>&1; then
     log "Installing $pinned on the host..."
-    npm install -g "$pinned" || warn "Host opencode install failed - not fatal, the container has its own."
+    npm install -g "$pinned" || warn "Host pi install failed - not fatal, the container has its own."
+    # The llama.cpp provider is a separate package; without it pi reports
+    # "No models available" no matter how LLAMA_BASE_URL is set.
+    log "Installing the llama.cpp provider package..."
+    pi install git:github.com/huggingface/pi-llama || warn "pi-llama install failed - pi won't see the llama.cpp router until it succeeds."
   else
-    warn "npm isn't usable on this host - skipping the host opencode install. The container has its own copy, so this only matters if you wanted to run opencode natively."
+    warn "npm isn't usable on this host - skipping the host pi install. The container has its own copy, so this only matters if you wanted to run pi natively."
   fi
 fi
 
@@ -199,6 +168,6 @@ fi
 echo
 log "Setup complete."
 if (( ! SKIP_CONTAINER )); then
-  log "Interactive agent:  ./docker-agent/chat.sh host/${MODELS[0]:-qwen3.6-128k}"
+  log "Interactive agent:  ./docker-agent/chat.sh"
   log "Eval harness:       cd test && ./test.py 01-data-loading --skills"
 fi

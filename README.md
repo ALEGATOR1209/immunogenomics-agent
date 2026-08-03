@@ -8,9 +8,9 @@ Three parts, independent of each other:
 
 | Directory | What it is |
 |---|---|
-| [`skills/`](./skills) | The deliverable — Claude Code / opencode skills covering single-cell (scirpy) and bulk (pandas) TCR-seq pipelines |
+| [`skills/`](./skills) | The deliverable — Claude Code / pi skills covering single-cell (scirpy) and bulk (pandas) TCR-seq pipelines |
 | [`docker/`](./docker), [`docker-agent/`](./docker-agent) | Two sandboxed containers for running a local LLM agent, isolating different things ([comparison](./docker-agent/README.md#comparison-with-docker)) |
-| [`test/`](./test) | An eval harness: runs opencode against a fixed task + dataset, with and without the skills mounted, and grades the answers |
+| [`test/`](./test) | An eval harness: runs pi against a fixed task + dataset, with and without the skills mounted, and grades the answers |
 
 ## The skills
 
@@ -39,14 +39,14 @@ pytcr-bulk-data-loading → pytcr-bulk-repertoire-metrics
 ```
 
 To use them in Claude Code, `./setup.sh` links `skills/` into
-`.claude/skills/` (`skills/` stays the single source of truth). opencode
-reads them from `~/.claude/skills/` instead — the eval harness mounts them
-there itself.
+`.claude/skills/` (`skills/` stays the single source of truth). pi
+auto-discovers skills from `~/.pi/agent/skills/` instead — the eval harness
+mounts them there itself.
 
 ## Setup
 
-Requirements: **Docker** (with Compose v2), **[Ollama](https://ollama.com)**,
-**Python 3**. Then, from the repo root:
+Requirements: **Docker** (with Compose v2), a **llama.cpp** build on the host
+(see the warning below), **Python 3**. Then, from the repo root:
 
 ```bash
 ./setup.sh
@@ -54,25 +54,33 @@ Requirements: **Docker** (with Compose v2), **[Ollama](https://ollama.com)**,
 
 That is idempotent and does everything a fresh clone needs:
 
-1. Starts `ollama serve` if nothing is listening on `:11434`.
-2. Pulls `qwen3.6` and derives **`qwen3.6-128k`** from it. Ollama loads every
-   model with a 32768-token context by default no matter what the
-   architecture supports, and blows past it *silently* mid-task — so the
-   `-128k` variant (same weights, `PARAMETER num_ctx 131072`, no
-   re-download) is what everything here defaults to. `num_ctx` is read from
-   [`docker-agent/opencode.json`](./docker-agent/opencode.json) so it can't
-   drift from the context limit opencode is told about.
-3. Links `.claude/skills` → `skills/`.
-4. Builds and starts the agent container (`pytcr-agent:latest`).
+1. Checks for the `llama` binary and reports what the model router has.
+2. Links `.claude/skills` → `skills/`.
+3. Builds and starts the agent container (`pytcr-agent:latest`), verifying
+   from inside it that the host's router is actually reachable.
 
 Useful variations:
 
 ```bash
-./setup.sh --models glm-4.7-flash-128k   # a different model (must be declared in docker-agent/opencode.json)
-./setup.sh --all-models                  # every *-128k model declared there
+./setup.sh --models unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF:Q4_K_XL  # have the router fetch a model
 ./setup.sh --skip-models                 # container + skills symlink only
 ./setup.sh --skip-container              # host side only, no Docker needed
+./setup.sh --with-host-pi                # also install pi + its llama.cpp provider on the host
 ./setup.sh --help
+```
+
+**Build llama.cpp against CUDA 12.x, not 13.x.** The CUDA 13 prebuilt
+binaries fail `cublasCreate_v2` with `CUBLAS_STATUS_ALLOC_FAILED` on any
+prompt long enough to take the cuBLAS path — a few hundred tokens — while
+short prompts succeed and make the build look healthy. It is independent of
+free VRAM, offload, batch size and mmap. Details in
+[`docker-agent/README.md`](./docker-agent/README.md#prerequisites).
+
+Start the model server before using the agent:
+
+```bash
+./docker-agent/llama-server.sh --list              # what's available
+./docker-agent/llama-server.sh --load <model-id>   # start the router and load one
 ```
 
 **Eval data is not in this repo.** Each `test/<NN-name>/` needs a `data/`
@@ -82,8 +90,8 @@ that are missing one.
 ## Running the agent
 
 ```bash
-./docker-agent/chat.sh                          # interactive opencode, default host/qwen3.6-128k
-./docker-agent/chat.sh host/glm-4.7-flash-128k  # any model declared in opencode.json
+./docker-agent/chat.sh              # interactive pi, using whichever model the router has loaded
+./docker-agent/chat.sh <model-id>   # pick one explicitly (it must already be loaded)
 ```
 
 The model runs natively on the host (keeping GPU acceleration); only the
@@ -102,7 +110,7 @@ cd test
 ./test.py 01-data-loading                     # baseline: no skills mounted
 ./test.py 01-data-loading --skills            # with skills/ mounted into the container
 ./test.py 01-data-loading --timeout 30 --n 3  # 30-minute cap, 3 repeats
-./test.py 01-data-loading --model host/glm-4.7-flash-128k
+./test.py 01-data-loading --model 'ggml-org/Qwen3.6-35B-A3B-GGUF:Q4_K_M'
 ./run_all.py                                  # every task, 5x with skills and 5x without
 ```
 
@@ -129,12 +137,16 @@ Adding a task means a new `test/<NN-name>/` with a `task.json` (prompt,
 ground truth, per-field tolerances), a `data/` directory, and optionally a
 `starter.ipynb` to begin from a partially-built notebook.
 
-## Known issue
+## History
 
-Ollama's OpenAI-compatible endpoint — the one opencode talks to — silently
-drops tool calls under streaming
-([ollama/ollama#12557](https://github.com/ollama/ollama/issues/12557)), so a
-run can end mid-task with `finish_reason: "stop"` and no error. It's
-upstream and model-independent (reproduced on qwen3.6 and glm-4.7-flash).
-Routing around it via llama.cpp was attempted and blocked; the full write-up
-is in [`docker-agent/README.md`](./docker-agent/README.md#known-issue--ollamas-openai-compat-endpoint-drops-tool-calls-under-streaming).
+This setup previously ran **opencode against Ollama**. Ollama's
+OpenAI-compatible endpoint silently drops tool calls under streaming
+([ollama/ollama#12557](https://github.com/ollama/ollama/issues/12557)), so
+runs ended mid-task with `finish_reason: "stop"` and no error —
+model-independent, reproduced on qwen3.6, glm-4.7-flash and
+devstral-small-2. Moving to llama.cpp's own server routes around it.
+
+Eval runs from before the migration carry `"harness": "opencode"` in their
+`eval_result.json` and are **not comparable** to later ones: harness, model
+server and model changed together. [`docker/`](./docker) still runs the old
+opencode + Ollama-in-container arrangement and was intentionally left alone.

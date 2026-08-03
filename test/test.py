@@ -3,16 +3,25 @@
 
 Usage (from inside test/):
     ./test.py <task-dir-name> [--skills] [--timeout MINUTES] [--n COUNT] [--model MODEL]
-    MODEL=host/qwen3.5 ./test.py 01-data-loading --skills
-    ./test.py 01-data-loading --model host/qwen3.5
+    MODEL='unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF:Q4_K_XL' ./test.py 01-data-loading --skills
+    ./test.py 01-data-loading --model 'ggml-org/Qwen3.6-35B-A3B-GGUF:Q4_K_M'
 
---model MODEL: which opencode model to use. Precedence: this flag, then the
-    MODEL env var, then host/qwen3.6-128k as the final default.
+--model MODEL: which model id to run, as the llama.cpp router reports it.
+    Precedence: this flag, then the MODEL env var, then - if exactly one
+    model is loaded on the router - that one. The router only serves loaded
+    models, so there's no useful hardcoded default; list them with
+    ../docker-agent/llama-server.sh --list.
 
 --skills: bind-mounts the project's skills/ (read-only) into the container
-    at /root/.claude/skills, opencode's "external skills (auto-loaded)"
-    location. Sourced from skills/, not .claude/skills/ (gitignored
+    at /root/.pi/agent/skills, pi's global auto-discovered skills location
+    (docs/skills.md). Sourced from skills/, not .claude/skills/ (gitignored
     symlink, absent on a fresh clone).
+
+The model server is llama.cpp's router running natively on the host; the
+container reaches it via host.docker.internal. Start it with
+../docker-agent/llama-server.sh (which binds 0.0.0.0 - a router on
+127.0.0.1 is invisible to the container). Override the URL with
+LLAMA_BASE_URL.
 
 --timeout MINUTES: kill the agent's container if it hasn't finished within
     this many minutes (default: 20). A background thread issues
@@ -44,11 +53,23 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.error
+import urllib.request
 from datetime import datetime
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent
+
+# Where the container reaches the host's llama.cpp router, and where this
+# script (running on the host) reaches the same server to resolve model ids.
+CONTAINER_LLAMA_URL = os.environ.get("LLAMA_BASE_URL", "http://host.docker.internal:8080")
+HOST_LLAMA_URL = os.environ.get("HOST_LLAMA_URL", "http://127.0.0.1:8080")
+
+# The provider id registered by git:github.com/huggingface/pi-llama, which
+# docker-agent's Dockerfile installs. Note the hyphen: pi also ships a
+# separate built-in "llama.cpp" (dot) provider, which is NOT this one.
+PI_PROVIDER = "llama-cpp"
 
 DOCKERFILE_TEMPLATE = """ARG BASE_IMAGE=pytcr-agent:latest
 FROM ${BASE_IMAGE}
@@ -74,7 +95,7 @@ RUN /opt/conda/bin/mamba env create -f /tmp/environment.yml \\
 
 # Make the task's conda env (name: pytcr, from environment.yml) the
 # default on PATH for every process in the container, including the
-# bash/python calls opencode's agent makes - no `conda activate` needed.
+# bash/python calls pi's agent makes - no `conda activate` needed.
 ENV PATH=/opt/conda/envs/pytcr/bin:$PATH
 """
 
@@ -121,16 +142,56 @@ def parse_args():
     return args
 
 
-def get_model_server():
-    """Reads the provider name (e.g. "Ollama") out of docker-agent/opencode.json,
-    so eval_result.json records whatever's actually serving the model rather
-    than a hardcoded string that could go stale if the provider changes."""
-    opencode_json = REPO_ROOT / "docker-agent" / "opencode.json"
+def router_models():
+    """Every model the host's llama.cpp router knows, as (id, status) pairs.
+    Returns None when the router isn't reachable, so callers can tell "no
+    server" apart from "server with nothing loaded"."""
     try:
-        config = json.loads(opencode_json.read_text())
-        return config["provider"]["host"]["name"]
-    except (OSError, json.JSONDecodeError, KeyError):
-        return "unknown"
+        with urllib.request.urlopen(f"{HOST_LLAMA_URL}/models", timeout=5) as resp:
+            data = json.loads(resp.read())
+        return [(m["id"], m["status"]["value"]) for m in data["data"]]
+    except (urllib.error.URLError, OSError, ValueError, KeyError):
+        return None
+
+
+def get_model_server():
+    """What eval_result.json records as having served the model. The router
+    reports no version of its own, so this is the server kind plus whether it
+    was actually reachable at run time."""
+    return "llama.cpp" if router_models() is not None else "llama.cpp (unreachable)"
+
+
+def resolve_model(explicit):
+    """--model, else MODEL, else the single loaded model on the router.
+
+    There is deliberately no hardcoded default: the router serves only models
+    that are currently loaded, so any fixed id would be wrong most of the
+    time. Failing loudly here beats a run that dies inside the container with
+    an opaque 400 "model is not loaded"."""
+    if explicit:
+        return explicit
+    if os.environ.get("MODEL"):
+        return os.environ["MODEL"]
+
+    models = router_models()
+    if models is None:
+        die(
+            f"No llama.cpp router answering at {HOST_LLAMA_URL}, and no --model/MODEL given.\n"
+            "  Start one:  ../docker-agent/llama-server.sh --load <model-id>"
+        )
+    loaded = [mid for mid, status in models if status == "loaded"]
+    if not loaded:
+        known = "\n".join(f"    {mid}" for mid, _ in models) or "    (none)"
+        die(
+            "The router has no model loaded, and no --model/MODEL was given.\n"
+            f"  Load one:  ../docker-agent/llama-server.sh --load <model-id>\n"
+            f"  Known models:\n{known}"
+        )
+    if len(loaded) > 1:
+        opts = "\n".join(f"    {mid}" for mid in loaded)
+        die(f"Several models are loaded - pass --model to pick one:\n{opts}")
+    log(f"Using the router's only loaded model: {loaded[0]}")
+    return loaded[0]
 
 
 def check_docker():
@@ -164,24 +225,76 @@ def render_prompt(task_json):
     return result.stdout
 
 
+def _part_text(part):
+    """pi's content parts keep their payload under a type-named key ("text"
+    for text, "thinking" for thinking); tolerate either, plus older shapes."""
+    for key in ("text", "thinking", "content"):
+        value = part.get(key)
+        if isinstance(value, str) and value:
+            return value
+    return ""
+
+
+def _brief(value, limit):
+    text = value if isinstance(value, str) else json.dumps(value, default=str)
+    text = " ".join(text.split())
+    return text[:limit] + ("..." if len(text) > limit else "")
+
+
 def format_event(event):
+    """Renders pi's --mode json event stream (docs/json.md) into the readable
+    run.txt. Only the events worth reading are rendered; the untouched stream
+    is always kept alongside it in run.jsonl, so anything skipped here is
+    still recoverable.
+
+    Deliberately ignores message_update: those carry per-token deltas, and
+    echoing them would reproduce the whole response one fragment at a time.
+    The completed message arrives in message_end."""
     etype = event.get("type")
-    part = event.get("part", {})
-    if etype == "reasoning":
-        return f"🧠 THINKING: {part.get('text', '')}"
-    if etype == "tool_use":
-        state = part.get("state", {})
-        input_str = json.dumps(state.get("input"))[:200]
-        output_str = str(state.get("output", ""))[:300]
-        return f"🔧 TOOL: {part.get('tool', '')}\n   IN:  {input_str}\n   OUT: {output_str}"
-    if etype == "text":
-        return f"💬 OUTPUT:\n{part.get('text', '')}"
-    if etype == "step_finish":
-        tokens = part.get("tokens", {})
+
+    if etype == "message_end":
+        message = event.get("message", {})
+        if message.get("role") != "assistant":
+            return None
+        lines = []
+        for part in message.get("content", []) or []:
+            ptype = part.get("type")
+            body = _part_text(part)
+            if ptype == "thinking" and body:
+                lines.append(f"🧠 THINKING: {body}")
+            elif ptype == "text" and body:
+                lines.append(f"💬 OUTPUT:\n{body}")
+        usage = message.get("usage") or {}
+        if usage:
+            summary = " ".join(f"{k}={v}" for k, v in usage.items() if isinstance(v, (int, float)))
+            if summary:
+                lines.append(f"📊 TOKENS: {summary}")
+        stop = message.get("stopReason")
+        # The opencode-era failure mode was a turn ending with no tool call
+        # and nothing left to do; surfacing stopReason keeps that visible.
+        if stop and stop not in ("stop", "toolUse"):
+            lines.append(f"⚠️  STOP REASON: {stop} {message.get('errorMessage', '')}".rstrip())
+        return "\n".join(lines) if lines else None
+
+    if etype == "tool_execution_start":
+        return f"🔧 TOOL: {event.get('toolName', '')}\n   IN:  {_brief(event.get('args'), 200)}"
+
+    if etype == "tool_execution_end":
+        marker = "ERR" if event.get("isError") else "OUT"
+        return f"   {marker}: {_brief(event.get('result'), 300)}"
+
+    if etype == "compaction_start":
+        return f"🗜️  COMPACTION START ({event.get('reason')})"
+
+    if etype == "compaction_end":
+        return f"🗜️  COMPACTION END ({event.get('reason')}) aborted={event.get('aborted')}"
+
+    if etype == "auto_retry_start":
         return (
-            f"📊 STEP TOKENS: input={tokens.get('input')} output={tokens.get('output')} "
-            f"reasoning={tokens.get('reasoning')} total={tokens.get('total')}"
+            f"🔁 RETRY {event.get('attempt')}/{event.get('maxAttempts')} "
+            f"after: {_brief(event.get('errorMessage'), 200)}"
         )
+
     return None
 
 
@@ -248,7 +361,7 @@ def run_once(task_name, task_dir, task_image, prompt, model, model_server, memor
     header = (
         f"=== Task: {task_name} ===\n"
         f"=== Model: {model} ===\n"
-        f"=== Harness: opencode ===\n"
+        f"=== Harness: pi ===\n"
         f"=== Model server: {model_server} ===\n"
         f"=== Skills: {'enabled (' + str(REPO_ROOT / 'skills') + ')' if use_skills else 'disabled'} ===\n"
         f"=== Timeout: {timeout_min}m ===\n"
@@ -260,7 +373,10 @@ def run_once(task_name, task_dir, task_image, prompt, model, model_server, memor
 
     skills_mount = []
     if use_skills:
-        skills_mount = ["-v", f"{REPO_ROOT / 'skills'}:/root/.claude/skills:ro"]
+        # pi auto-discovers skills in ~/.pi/agent/skills (docs/skills.md,
+        # "Global"), so mounting there needs no --skill flag - the same
+        # arrangement the opencode setup had with ~/.claude/skills.
+        skills_mount = ["-v", f"{REPO_ROOT / 'skills'}:/root/.pi/agent/skills:ro"]
 
     docker_cmd = [
         "docker", "run", "--rm",
@@ -268,13 +384,19 @@ def run_once(task_name, task_dir, task_image, prompt, model, model_server, memor
         "--add-host=host.docker.internal:host-gateway",
         "--cap-drop=ALL", "--security-opt", "no-new-privileges:true",
         "--memory", f"{memory_gb}g",
+        "-e", f"LLAMA_BASE_URL={CONTAINER_LLAMA_URL}",
         "-v", f"{run_dir / 'workspace'}:/root/task",
         "-v", f"{task_dir / 'data'}:/root/task/data:ro",
         *skills_mount,
         "-w", "/root/task",
         task_image,
-        "opencode", "run", "--model", model, "--format", "json", "--thinking",
-        "--dangerously-skip-permissions", prompt,
+        # pi has no permission prompts to bypass (no built-in sandbox - see
+        # its docs/security.md), so unlike opencode there's no
+        # --dangerously-skip-permissions equivalent to pass. --approve trusts
+        # project-local resources for this run; --no-session keeps runs from
+        # accumulating session files in the container.
+        "pi", "-p", "--mode", "json", "--approve", "--no-session",
+        "--provider", PI_PROVIDER, "--model", model, prompt,
     ]
 
     timed_out_event = threading.Event()
@@ -324,7 +446,7 @@ def run_once(task_name, task_dir, task_image, prompt, model, model_server, memor
     eval_data["timed_out"] = timed_out
     eval_data["interrupted"] = interrupted
     eval_data["model"] = model
-    eval_data["harness"] = "opencode"
+    eval_data["harness"] = "pi"
     eval_data["model_server"] = model_server
     eval_file.write_text(json.dumps(eval_data, indent=2))
 
@@ -343,7 +465,7 @@ def run_once(task_name, task_dir, task_image, prompt, model, model_server, memor
 
 def main():
     args = parse_args()
-    model = args.model or os.environ.get("MODEL", "host/qwen3.6-128k")
+    model = resolve_model(args.model)
     model_server = get_model_server()
     memory_gb = os.environ.get("MEMORY_GB", "8")
 
