@@ -84,8 +84,10 @@ Start the model server before using the agent:
 ```
 
 **Eval data is not in this repo.** Each `test/<NN-name>/` needs a `data/`
-directory supplied separately (it's gitignored); `setup.sh` lists the tasks
-that are missing one.
+directory (it's gitignored); `setup.sh` lists the tasks that are missing
+one. If a task's `task.json` declares a `"data"` field, it's fetched
+automatically - either on the first `test.py` run, or ahead of time with
+`test/fetch_data.py <task-dir>`. Otherwise it has to be supplied by hand.
 
 ## Running the agent
 
@@ -134,8 +136,11 @@ python3 grade.py <task.json> <output.json> [duration_seconds] [skills]
 ```
 
 Adding a task means a new `test/<NN-name>/` with a `task.json` (prompt,
-ground truth, per-field tolerances), a `data/` directory, and optionally a
-`starter.ipynb` to begin from a partially-built notebook.
+ground truth, per-field tolerances), a `data/` directory (or a `"data"`
+field for `fetch_data.py` to populate it from GEO - see `test/fetch_data.py
+--help`), and optionally a `starter.ipynb` to begin from a partially-built
+notebook. See [`docs/task-json.md`](./docs/task-json.md) for the full
+`task.json` field reference and a step-by-step walkthrough.
 
 ## History
 

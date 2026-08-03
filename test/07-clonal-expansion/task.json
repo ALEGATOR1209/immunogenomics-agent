@@ -1,4 +1,16 @@
 {
+  "data": [
+    {
+      "type": "GEO",
+      "uri": "GSM4143663",
+      "path": "LT5"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM4143664",
+      "path": "LN5"
+    }
+  ],
   "grader": {
     "config": {
       "ground_truth": {

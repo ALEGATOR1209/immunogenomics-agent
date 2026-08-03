@@ -128,8 +128,8 @@ else
     --jinja \
     --host "$BIND" \
     --port "$PORT" \
-    "${OVERRIDE_ARGS[@]}" \
-    "${PRESET_ARGS[@]}" &
+    "${OVERRIDE_ARGS[@]+"${OVERRIDE_ARGS[@]}"}" \
+    "${PRESET_ARGS[@]+"${PRESET_ARGS[@]}"}" &
   SERVER_PID=$!
 
   # Hand Ctrl-C to the server rather than orphaning it.

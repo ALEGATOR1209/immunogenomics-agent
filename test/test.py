@@ -44,6 +44,12 @@ to one pipeline stage that assume an earlier stage's setup already happened.
 Keep it out of data/ (that mount is read-only, so the agent would have to
 discover and copy it out itself before being able to edit it - exactly the
 kind of read-only-filesystem confusion this is meant to avoid).
+
+If <task-dir>/data/ doesn't exist yet and task.json has a "data" field
+(e.g. {"type": "GEO", "uri": "GSM4339771"}, or a list of those for several
+samples), it's fetched automatically via fetch_data.py before the build.
+Run that script directly (`./fetch_data.py <task-dir>`) to pre-fetch without
+starting a run.
 """
 import argparse
 import json
@@ -205,6 +211,19 @@ def ensure_base_image():
     if run(["docker", "image", "inspect", "pytcr-agent:latest"], capture_output=True).returncode != 0:
         log("Building base agent image from docker-agent/...")
         run(["docker", "build", "-t", "pytcr-agent:latest", str(REPO_ROOT / "docker-agent")], check=True)
+
+
+def ensure_task_data(task_dir, task_config):
+    """Downloads data/ via fetch_data.py if task.json declares a "data"
+    source and data/ doesn't exist yet. Runs before the Docker build so a
+    fresh clone (data/ gitignored) can go straight to `./test.py <task>` for
+    tasks that declare a source, without a separate manual step first."""
+    if (task_dir / "data").is_dir():
+        return
+    if not task_config.get("data"):
+        die(f"Missing data/ in {task_dir} (and task.json has no \"data\" field to fetch it automatically).")
+    log(f"data/ missing for {task_dir.name} - fetching via fetch_data.py...")
+    run([sys.executable, str(SCRIPT_DIR / "fetch_data.py"), str(task_dir)], check=True)
 
 
 def ensure_task_dockerfile(task_dir):
@@ -477,12 +496,11 @@ def main():
     task_json = task_dir / "task.json"
     if not task_json.is_file():
         die(f"Missing task.json in {task_dir}")
-    if not (task_dir / "data").is_dir():
-        die(f"Missing data/ in {task_dir}")
     try:
-        json.loads(task_json.read_text())
+        task_config = json.loads(task_json.read_text())
     except json.JSONDecodeError:
         die(f"task.json in {task_dir} is not valid JSON")
+    ensure_task_data(task_dir, task_config)
 
     check_docker()
     ensure_base_image()

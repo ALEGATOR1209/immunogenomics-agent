@@ -92,7 +92,7 @@ for m in data:
 
   # Downloading is done by the router itself (POST /models with a HF repo
   # id), so it has to be running for this.
-  for model in "${MODELS[@]}"; do
+  for model in "${MODELS[@]+"${MODELS[@]}"}"; do
     router_up || die "--models needs a running router. Start it: ./docker-agent/llama-server.sh"
     log "Asking the router to fetch '$model' (large download; skipped if already cached)..."
     curl -s -m 3600 -X POST "$API/models" \
@@ -152,17 +152,29 @@ if (( HOST_PI )); then
 fi
 
 # =====================================================================
-# 5. Eval task data (not git-tracked - has to be supplied by hand)
+# 5. Eval task data (not git-tracked - fetched automatically where task.json
+#    declares a source, otherwise has to be supplied by hand)
 # =====================================================================
-missing_data=()
+missing_data_auto=()
+missing_data_manual=()
 for task_dir in "$SCRIPT_DIR"/test/*/; do
   [[ -f "$task_dir/task.json" ]] || continue
-  [[ -d "$task_dir/data" ]] || missing_data+=("$(basename "$task_dir")")
+  [[ -d "$task_dir/data" ]] && continue
+  if python3 -c 'import json,sys; sys.exit(0 if json.load(open(sys.argv[1])).get("data") else 1)' "$task_dir/task.json" 2>/dev/null; then
+    missing_data_auto+=("$(basename "$task_dir")")
+  else
+    missing_data_manual+=("$(basename "$task_dir")")
+  fi
 done
-if (( ${#missing_data[@]} )); then
+if (( ${#missing_data_auto[@]} )); then
+  echo
+  warn "These eval tasks have no data/ directory but declare a source in task.json - fetch it with test/fetch_data.py <task>, or it'll be fetched automatically on the first test.py run:"
+  printf '     %s\n' "${missing_data_auto[@]+"${missing_data_auto[@]}"}" >&2
+fi
+if (( ${#missing_data_manual[@]} )); then
   echo
   warn "These eval tasks have no data/ directory (it's gitignored - supply it separately before running them):"
-  printf '     %s\n' "${missing_data[@]}" >&2
+  printf '     %s\n' "${missing_data_manual[@]+"${missing_data_manual[@]}"}" >&2
 fi
 
 echo
