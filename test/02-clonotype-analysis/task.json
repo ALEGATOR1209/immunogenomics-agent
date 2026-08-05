@@ -46,5 +46,5 @@
     "kit": "scirpy",
     "task": "clonotype-analysis"
   },
-  "task": "There is a 10x-genomics single cell CellRanger data with RNA-seq (feature bc matrix) and TCR-seq (contig annotations) data. Load the data, perform preprocessing and quality control. You can filter cells and genes with thresholds you see fit or not at all. Filter our orphant chains and samples without TCR data. Find the remaining number of cells that has a single pair for chain pairing. Find the total number of remaining cells. Define clonotypes. Find the total number of identified clonotypes. Find the size of the largest clonotype."
+  "task": "There is a 10x-genomics single cell CellRanger data with RNA-seq (feature bc matrix) and TCR-seq (contig annotations) data. Load the data, perform preprocessing and quality control. You can filter cells and genes with thresholds you see fit or not at all. Filter out orphant chains and samples without TCR data. Find the remaining number of cells that has a single pair for chain pairing. Find the total number of remaining cells. Define clonotypes. Find the total number of identified clonotypes. Find the size of the largest clonotype."
 }
