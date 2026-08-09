@@ -14,8 +14,10 @@
   "grader": {
     "config": {
       "ground_truth": {
-        "more_TRAV21": "LT5",
-        "most_frequent_v_gene": "TRBV28"
+        "dominant_alpha_lt5": "TRAV12-2",
+        "secondary_alpha_lt5": "TRAV26-1",
+        "trav14dv4_usage": "LN5",
+        "most_abundant_beta_chain_d_gene": "TRBD2"
       },
       "tolerances": {
       }
@@ -28,5 +30,5 @@
     "kit": "scirpy",
     "task": "gene-usage"
   },
-  "task": "There is a 10x-genomics single cell CellRanger data with RNA-seq (feature bc matrix) and TCR-seq (contig annotations) data. There are two samples, LT5 and LN5. There's also a jupyter notebook with basic data loading setup. Build upon. Perform gene usage analysis. Which sample has more cells with TRAV21 gene? Which V gene is most frequently used on the VDJ (beta) chain?"
+  "task": "There is a 10x-genomics single cell CellRanger data with RNA-seq (feature bc matrix) and TCR-seq (contig annotations) data. There are two samples, LT5 and LN5. Load the data, perform quality control as needed. Use only samples with IR, without orphan chains and with at most two full chains for the subsequent analyses. Which is the most abundant dominant alpha-chain gene in the LT5 sample? Which is the most abundant secondary alpha-chain gene in the LT5 sample? Which sample exposes more TRAV14DV4 usage on dominant alpha chain? Among all samples, for those clonotypes that has TRBV20-1 for V region of their beta chain, which D gene is the most abundant? Write the full gene name."
 }
