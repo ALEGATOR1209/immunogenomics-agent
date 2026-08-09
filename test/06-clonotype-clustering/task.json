@@ -167,7 +167,7 @@
         "et3_mean_modularity": 1.169,
         "top_modularity_score": 7.0438664705576715,
         "top_pval": 2.4441719293223418e-36,
-        "top_expression_FGFPB2": "less",
+        "top_expression_FGFBP2": "less",
         "n_tumor_differential_clonotypes": 2
       },
       "tolerances": {
@@ -193,5 +193,5 @@
     "kit": "scirpy",
     "task": "clonotype-clustering"
   },
-  "task": "There is 10x-genomics single cell CellRanger data with RNA-seq (feature bc matrix) and TCR-seq (contig annotations) data for blood (*B samples), tumor (*T samples) and normal tumor-adjascent tissue (*N samples) for different patients. Load the data, perform quality control as necessary and integrate the samples. Use only TCR data, with from one to two functional pairs of chains. Define clonotypes and clonotype networks (min_cells = 3). Calculate clonotype modularity. What is the mean modularity of the ET3 sample? From all the samples, take only those that belong to the blood tissue. Take top 1 clonotype with the highest modularity score. What the score and the FDR-adjusted p-value are? Is gene FGFPB2 more or less expressed in the most modular clonotype compared to the rest of the cells? (\"more\" or \"less\"). Calculate clonotype imbalance between normal cells and tumor cells. Take top 3 differential clonotypes. How many of them correspond primarily to tumor tissues?"
+  "task": "There is 10x-genomics single cell CellRanger data with RNA-seq (feature bc matrix) and TCR-seq (contig annotations) data for blood (*B samples), tumor (*T samples) and normal tumor-adjascent tissue (*N samples) for different patients. Load the data, perform quality control as necessary and integrate the samples. Use only TCR data, with from one to two functional pairs of chains. Define clonotypes and clonotype networks (min_cells = 3) based on sequence and amino-acid similarity. Calculate clonotype modularity. What is the mean (per cell) modularity of the ET3 sample? From all the samples and calculated clonotypes, take only those that belong to the blood tissue. Take top 1 clonotype with the highest modularity score. What the score and the FDR-adjusted p-value are? Is gene FGFBP2 more or less expressed in the most modular clonotype compared to the rest of the cells? (\"more\" or \"less\"). Calculate clonotype imbalance between normal cells and tumor cells. Take top 3 differential clonotypes. How many of them correspond (on cellular level) primarily to tumor tissues?"
 }
