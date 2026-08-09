@@ -2,6 +2,46 @@
   "data": [
     {
       "type": "GEO",
+      "uri": "GSM4143655",
+      "path": "LT1"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM4143656",
+      "path": "LN1"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM4143657",
+      "path": "LT2"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM4143658",
+      "path": "LN2"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM4143659",
+      "path": "LT3"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM4143660",
+      "path": "LN3"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM4143661",
+      "path": "LT4"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM4143662",
+      "path": "LN4"
+    },
+    {
+      "type": "GEO",
       "uri": "GSM4143663",
       "path": "LT5"
     },
@@ -9,32 +49,139 @@
       "type": "GEO",
       "uri": "GSM4143664",
       "path": "LN5"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM4143665",
+      "path": "LT6"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM4143666",
+      "path": "LN6"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM4143667",
+      "path": "LB6"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM4143668",
+      "path": "ET1"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM4143669",
+      "path": "EN1"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM4143670",
+      "path": "ET2"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM4143671",
+      "path": "EN2"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM4143672",
+      "path": "ET3"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM4143673",
+      "path": "EN3"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM4143674",
+      "path": "CT1"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM4143675",
+      "path": "CN1"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM4143676",
+      "path": "CT2"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM4143677",
+      "path": "CN2"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM4143678",
+      "path": "RT1"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM4143679",
+      "path": "RN1"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM4143680",
+      "path": "RB1"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM4143681",
+      "path": "RT2"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM4143682",
+      "path": "RN2"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM4143683",
+      "path": "RB2"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM4143684",
+      "path": "RT3"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM4143685",
+      "path": "RN3"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM4143686",
+      "path": "RB3"
     }
   ],
   "grader": {
     "config": {
       "ground_truth": {
-        "cells_multiple_tcr": 0.06,
-        "n_cells_single_pair": 4406,
-        "n_cells_no_ir": 267,
-        "largest_network": 243
+        "et3_mean_modularity": 1.169,
+        "top_modularity_score": 7.0438664705576715,
+        "top_pval": 2.4441719293223418e-36,
+        "top_expression_FGFPB2": "less",
+        "n_tumor_differential_clonotypes": 2
       },
       "tolerances": {
-        "cells_multiple_tcr": {
+        "et3_mean_modularity": {
           "type": "absolute",
           "value": 0.03
         },
-        "n_cells_single_pair": {
+        "top_modularity_score": {
           "type": "absolute",
-          "value": 100
+          "value": 0.5
         },
-        "n_cells_no_ir": {
+        "top_pval": {
           "type": "absolute",
-          "value": 10
-        },
-        "largest_network": {
-          "type": "absolute",
-          "value": 20
+          "value": 1e-35
         }
       }
     },
@@ -46,5 +193,5 @@
     "kit": "scirpy",
     "task": "clonotype-clustering"
   },
-  "task": "There is a 10x-genomics single cell CellRanger data with RNA-seq (feature bc matrix) and TCR-seq (contig annotations) data. There are two samples, LT5 and LN5. There's also a jupyter notebook with basic data loading setup. Build upon. Find the fraction of cells with more than one full receptor chain beyond a single pair (cells_multiple_tcr). Filter out cells with orphan chains and multichains. Find the number of cells with exactly one productive VJ and one productive VDJ chain, and with no IR. Define clonotypes using nucleotide sequence identity. Use all receptor arms and only primary IR for dual IR cells. Calculate clonotype networks with minimum cells threshold 5. Define clonotype using amino-acid sequence similarity, with cutoff 15. Define clonotype clusters (all IRs for double IR cells). Re-calculate networks with min cells = 3. Find the size of the largest clonotype network."
+  "task": "There is 10x-genomics single cell CellRanger data with RNA-seq (feature bc matrix) and TCR-seq (contig annotations) data for blood (*B samples), tumor (*T samples) and normal tumor-adjascent tissue (*N samples) for different patients. Load the data, perform quality control as necessary and integrate the samples. Use only TCR data, with from one to two functional pairs of chains. Define clonotypes and clonotype networks (min_cells = 3). Calculate clonotype modularity. What is the mean modularity of the ET3 sample? From all the samples, take only those that belong to the blood tissue. Take top 1 clonotype with the highest modularity score. What the score and the FDR-adjusted p-value are? Is gene FGFPB2 more or less expressed in the most modular clonotype compared to the rest of the cells? (\"more\" or \"less\"). Calculate clonotype imbalance between normal cells and tumor cells. Take top 3 differential clonotypes. How many of them correspond primarily to tumor tissues?"
 }
