@@ -1,52 +1,73 @@
 # pyTCR skills
 
-Agent skills for **TCR-seq / AIRR-seq repertoire analysis**, plus the
+Agent skills for **TCR-seq / BCR-seq / AIRR-seq repertoire analysis**, plus the benchmanrk
 infrastructure to measure whether they actually help a coding agent do the
 analysis.
 
-Three parts, independent of each other:
+## Project Architecture
 
 | Directory | What it is |
 |---|---|
-| [`skills/`](./skills) | The deliverable — Claude Code / pi skills covering single-cell (scirpy) and bulk (pandas) TCR-seq pipelines |
-| [`docker/`](./docker), [`docker-agent/`](./docker-agent) | Two sandboxed containers for running a local LLM agent, isolating different things ([comparison](./docker-agent/README.md#comparison-with-docker)) |
+| [`skills/`](./skills) | Open standard skills compatible with Claude Code and other harnesses. The skills cover single-cell (scirpy) and bulk (pandas) TCR-seq pipelines.<br/><br/> ❗️For now only the single-cell skills are tested and fine-tuned. |
+| [`docker-agent/`](./docker-agent) | Sandboxed container for providing an isolated environment for the agent evaluation. The LLM is hosted outside of the container and is accessed via API. The harness is launched inside the container with access to input data and preinstalled Python environment.<br/><br/>Two execution modes: interactive chat, or launching with a defined task. |
 | [`test/`](./test) | An eval harness: runs pi against a fixed task + dataset, with and without the skills mounted, and grades the answers |
 
 ## The skills
 
-Two families that don't interoperate — they use different tools and never
-share a data object. Each skill's frontmatter states its prerequisite.
+### Single-cell
 
-**Single-cell**, via [scirpy](https://scirpy.scverse.org/) on a `MuData`
-object with `gex` + `airr` modalities:
+**Single-cell** skills are based on [scirpy](https://scirpy.scverse.org/) & [scanpy](https://scanpy.readthedocs.io/) ecosystem.
 
+| Skill | Description |
+|-------|-------------|
+| [`pytcr-data-loading`](skills/pytcr-data-loading/SKILL.md) | Data loading of AIRR or mixed scRNA-seq + AIRR data via scirpy (10x CellRanger, BD Rhapsody, TraCeR, BraCeR, etc). Builds a `MuData` object with `gex` and `airr` modalities.
+| [`pytcr-preprocess`](skills/pytcr-preprocess/SKILL.md) | Preprocessing, chain indexing, receptor type & pairing filtering. |
+| [`pytcr-sc-rnaseq-preprocessing`](skills/pytcr-sc-rnaseq-preprocessing/SKILL.md) | AIRR analyzis often involves scRNA-seq analysis to some extent, so this skill provides basic scRNA-seq preprocessing workflow. Minimum genes/cells filtering, HVG detection, log-normalization. |
+| [`pytcr-clonotype-clustering`](skills/pytcr-clonotype-clustering/SKILL.md) | Clonotype definition (nucleotide-sequence identity, amino-acid similarity), distance matrixes, clonotype clusters & networks calculation. |
+| [`pytcr-clonotype-analysis`](skills/pytcr-clonotype-analysis/SKILL.md) | Clonal expansion, abundance analysis, alpha-diversity, convergent evolution analysis. |
+| [`pytcr-gene-motifs`](skills/pytcr-gene-motifs/SKILL.md) | Gene/motif analysis. V-gene abundance, VDJ-genes usage. Spectratype plots. |
+| [`pytcr-repertoire-comparison`](skills/pytcr-repertoire-comparison/SKILL.md) | Analysis of repertoire overlap, sample similarity. |
+| [`pytcr-gex-integration`](skills/pytcr-gex-integration/SKILL.md) | Clonotype modularity analysis, differentially expressed clonotypes, clonotype imbalance, marker genes. |
+
+## User Setup
+
+To use the skills, clone the repository and install them:
+
+```bash
+git clone https://github.com/ALEGATOR1209/immunogenomics-agent.git
 ```
-pytcr-data-loading → pytcr-preprocess → pytcr-clonotype-clustering
-    → pytcr-clonotype-analysis / pytcr-gene-motifs
-    / pytcr-repertoire-comparison / pytcr-gex-integration
+
+### Standardized Install
+```bash
+cp -r immunogenomics-agent/skills/* ~/.agents/skills
 ```
 
-(`pytcr-preprocess` handles the `airr` modality; `pytcr-sc-rnaseq-preprocessing`
-is its `gex`-side counterpart — scanpy QC, normalization and HVG selection.)
+### Claude Code:
 
-**Bulk**, plain pandas on a standardized table (`sample`, `freq`, `#count`,
-`cdr3aa`, `cdr3nt`, `v`, `d`, `j`) — ported from the pyTCR paper's analysis
-notebooks, no package to install:
-
-```
-pytcr-bulk-data-loading → pytcr-bulk-repertoire-metrics
-    / pytcr-bulk-gene-motifs / pytcr-bulk-repertoire-overlap
+```bash
+cp -r immunogenomics-agent/skills/* ~/.claude/skills/
 ```
 
-To use them in Claude Code, `./setup.sh` links `skills/` into
-`.claude/skills/` (`skills/` stays the single source of truth). pi
-auto-discovers skills from `~/.pi/agent/skills/` instead — the eval harness
-mounts them there itself.
+### Codex
 
-## Setup
+```bash
+cp -r immunogenomics-agent/skills/* ~/.codex/skills/
+```
 
-Requirements: **Docker** (with Compose v2), a **llama.cpp** build on the host
-(see the warning below), **Python 3**. Then, from the repo root:
+### Pi
+
+```bash
+cp -r immunogenomics-agent/skills/* ~/.pi/agent/skills
+```
+
+## Development Setup
+
+**Dependencies:**
+1. Docker (with Compose v2)
+2. [llama.cpp](https://github.com/ggml-org/llama.cpp)
+3. Python 3 (env can be created from [environment.yml](test/environment.yml))
+
+Then, from the repo root:
 
 ```bash
 ./setup.sh
@@ -62,64 +83,85 @@ That is idempotent and does everything a fresh clone needs:
 Useful variations:
 
 ```bash
-./setup.sh --models unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF:Q4_K_XL  # have the router fetch a model
-./setup.sh --skip-models                 # container + skills symlink only
-./setup.sh --skip-container              # host side only, no Docker needed
-./setup.sh --with-host-pi                # also install pi + its llama.cpp provider on the host
+# have the router fetch a model
+./setup.sh --models unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF:Q4_K_XL
+
+# container + skills symlink only
+./setup.sh --skip-models
+
+# host side only, no Docker needed
+./setup.sh --skip-container
+
+# also install pi + its llama.cpp provider on the host
+./setup.sh --with-host-pi
+
 ./setup.sh --help
 ```
 
-**Build llama.cpp against CUDA 12.x, not 13.x.** The CUDA 13 prebuilt
-binaries fail `cublasCreate_v2` with `CUBLAS_STATUS_ALLOC_FAILED` on any
-prompt long enough to take the cuBLAS path — a few hundred tokens — while
-short prompts succeed and make the build look healthy. It is independent of
-free VRAM, offload, batch size and mmap. Details in
-[`docker-agent/README.md`](./docker-agent/README.md#prerequisites).
+> [!NOTE]
+> If you encounter errors related to `cublasCreate_v2`, rebuild llama.cpp against CUDA 12.x instead of 13.x
 
 Start the model server before using the agent:
 
 ```bash
-./docker-agent/llama-server.sh --list              # what's available
-./docker-agent/llama-server.sh --load <model-id>   # start the router and load one
+# list available models
+./docker-agent/llama-server.sh --list
+
+# start the router and load a model
+./docker-agent/llama-server.sh --load <model-id>
 ```
 
-**Eval data is not in this repo.** Each `test/<NN-name>/` needs a `data/`
-directory (it's gitignored); `setup.sh` lists the tasks that are missing
-one. If a task's `task.json` declares a `"data"` field, it's fetched
-automatically - either on the first `test.py` run, or ahead of time with
-`test/fetch_data.py <task-dir>`. Otherwise it has to be supplied by hand.
+### Fetching test data
+
+Input datasets for the tests are loaded automatically via the [`test.py`](test/test.py) script. It can be loaded manually via [`fetch_data.py`](test/fetch_data.py) script like this:
+
+```bash
+cd test
+./fetch_data.py 01-data-loading
+```
 
 ## Running the agent
 
 ```bash
-./docker-agent/chat.sh              # interactive pi, using whichever model the router has loaded
-./docker-agent/chat.sh <model-id>   # pick one explicitly (it must already be loaded)
+# interactive pi session in a Docker container,
+# using whichever model the router has loaded
+./docker-agent/chat.sh
+
+# pick one explicitly (it must already be loaded)
+./docker-agent/chat.sh <model-id>
 ```
 
 The model runs natively on the host (keeping GPU acceleration); only the
 agent — the part with file and shell access — is sandboxed, with
 `cap_drop: [ALL]`, no host bind mounts and no Docker socket. See
-[`docker-agent/README.md`](./docker-agent/README.md). The alternative,
-[`docker/`](./docker), isolates the *model* instead and is the right choice
-when the model file itself is untrusted.
+[`docker-agent/README.md`](./docker-agent/README.md).
 
-## Running the evals
-
-From inside `test/`:
+## Running the benchmark
 
 ```bash
 cd test
-./test.py 01-data-loading                     # baseline: no skills mounted
-./test.py 01-data-loading --skills            # with skills/ mounted into the container
-./test.py 01-data-loading --timeout 30 --n 3  # 30-minute cap, 3 repeats
+
+# baseline: no skills mounted
+./test.py 01-data-loading
+
+# with skills/ mounted into the container
+./test.py 01-data-loading --skills
+
+# 30-minute cap, 3 repeats
+./test.py 01-data-loading --timeout 30 --n 3
+
+# select specific model (must be pre-loaded)
 ./test.py 01-data-loading --model 'ggml-org/Qwen3.6-35B-A3B-GGUF:Q4_K_M'
-./run_all.py                                  # every task, 5x with skills and 5x without
+
+# full benchmark: every task,
+# 5 times with skills and 5 without
+./run_all.py
 ```
 
 Each run builds a task image (the agent container + a mamba env with
-scanpy/scirpy), starts a **fresh** container, gives the agent the task
-prompt plus the required output shape with all values masked, and grades the
-`output.json` it produces against the task's ground truth. Everything lands
+scanpy/scirpy), starts a **fresh** container, gives the agent [a base prompt](test/SYSTEM.md), the task
+prompt (from the respective `task.json`) plus the required output shape with all values masked. The results is stored in a
+`output.json` that is later graded automatically. Additionally, Jupyter notebook with the completed task is saved. Everything lands
 in `test/<task>/runs/<timestamp>/`:
 
 | File | Contents |
@@ -134,24 +176,3 @@ had written by then. To re-grade a saved answer without re-running:
 ```bash
 python3 grade.py <task.json> <output.json> [duration_seconds] [skills]
 ```
-
-Adding a task means a new `test/<NN-name>/` with a `task.json` (prompt,
-ground truth, per-field tolerances), a `data/` directory (or a `"data"`
-field for `fetch_data.py` to populate it from GEO - see `test/fetch_data.py
---help`), and optionally a `starter.ipynb` to begin from a partially-built
-notebook. See [`docs/task-json.md`](./docs/task-json.md) for the full
-`task.json` field reference and a step-by-step walkthrough.
-
-## History
-
-This setup previously ran **opencode against Ollama**. Ollama's
-OpenAI-compatible endpoint silently drops tool calls under streaming
-([ollama/ollama#12557](https://github.com/ollama/ollama/issues/12557)), so
-runs ended mid-task with `finish_reason: "stop"` and no error —
-model-independent, reproduced on qwen3.6, glm-4.7-flash and
-devstral-small-2. Moving to llama.cpp's own server routes around it.
-
-Eval runs from before the migration carry `"harness": "opencode"` in their
-`eval_result.json` and are **not comparable** to later ones: harness, model
-server and model changed together. [`docker/`](./docker) still runs the old
-opencode + Ollama-in-container arrangement and was intentionally left alone.
