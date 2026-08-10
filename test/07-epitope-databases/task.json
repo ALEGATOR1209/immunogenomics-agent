@@ -1,0 +1,187 @@
+{
+  "data": [
+    {
+      "type": "GEO",
+      "uri": "GSM4143655",
+      "path": "LT1"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM4143656",
+      "path": "LN1"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM4143657",
+      "path": "LT2"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM4143658",
+      "path": "LN2"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM4143659",
+      "path": "LT3"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM4143660",
+      "path": "LN3"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM4143661",
+      "path": "LT4"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM4143662",
+      "path": "LN4"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM4143663",
+      "path": "LT5"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM4143664",
+      "path": "LN5"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM4143665",
+      "path": "LT6"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM4143666",
+      "path": "LN6"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM4143667",
+      "path": "LB6"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM4143668",
+      "path": "ET1"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM4143669",
+      "path": "EN1"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM4143670",
+      "path": "ET2"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM4143671",
+      "path": "EN2"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM4143672",
+      "path": "ET3"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM4143673",
+      "path": "EN3"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM4143674",
+      "path": "CT1"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM4143675",
+      "path": "CN1"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM4143676",
+      "path": "CT2"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM4143677",
+      "path": "CN2"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM4143678",
+      "path": "RT1"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM4143679",
+      "path": "RN1"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM4143680",
+      "path": "RB1"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM4143681",
+      "path": "RT2"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM4143682",
+      "path": "RN2"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM4143683",
+      "path": "RB2"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM4143684",
+      "path": "RT3"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM4143685",
+      "path": "RN3"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM4143686",
+      "path": "RB3"
+    }
+  ],
+  "grader": {
+    "config": {
+      "ground_truth": {
+        "top_antigen_species_normal": "Severe acute respiratory syndrome coronavirus 2",
+        "top_antigen_species_tumor": "Homo sapiens",
+        "n_blood_antigens": 8
+      },
+      "tolerances": {
+        "n_blood_antigens": {
+          "type": "absolute",
+          "value": 2
+        }
+      }
+    },
+    "type": "numeric_tolerance"
+  },
+  "id": "10x-epitope-databases-scirpy-tutorial",
+  "metadata": {
+    "eval_type": "scientific",
+    "kit": "scirpy",
+    "task": "epitope-databases"
+  },
+  "task": "There is 10x-genomics single cell CellRanger data with RNA-seq (feature bc matrix) and TCR-seq (contig annotations) data for blood (*B samples), tumor (*T samples) and normal tumor-adjascent tissue (*N samples) for different patients. Load the data, perform quality control as necessary and integrate the samples. Use only TCR data, with from one to two functional pairs of chains. Define clonotypes and clonotype networks (min_cells = 3) based on sequence and amino-acid similarity. Using iggytop, perform antigen species enrichment. Find the most abundant antigen species among the normal tissue cells. Find the second most abundant antigen species among the tumor cells that is not ambiguos. Find the amount of antigen species in blood tissue present in more than 5 cells."
+}

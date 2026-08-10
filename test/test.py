@@ -95,8 +95,13 @@ RUN apt-get update \\
 # environment.yml lives at test/environment.yml, one level up from this
 # task directory - the build context is test/ (see `docker build -f`
 # below), so it's visible here as a context-root file.
+# channel_priority flexible: strict (Miniforge's default) refuses to mix
+# bioconda's scirpy>=0.24 with conda-forge's anndata>=0.9 it depends on,
+# even though both are installable together - see the solver's own
+# "Could not solve for environment specs" error without this.
 COPY environment.yml /tmp/environment.yml
-RUN /opt/conda/bin/mamba env create -f /tmp/environment.yml \\
+RUN /opt/conda/bin/conda config --set channel_priority flexible \\
+    && /opt/conda/bin/mamba env create -f /tmp/environment.yml \\
     && /opt/conda/bin/conda clean -afy
 
 # Make the task's conda env (name: pytcr, from environment.yml) the
