@@ -153,6 +153,9 @@ cd test
 # select specific model (must be pre-loaded)
 ./test.py 01-data-loading --model 'ggml-org/Qwen3.6-35B-A3B-GGUF:Q4_K_M'
 
+# compare against Claude, via pi's built-in anthropic provider
+ANTHROPIC_API_KEY=sk-ant-... ./test.py 01-data-loading --provider anthropic --model claude-opus-5
+
 # full benchmark: every task,
 # 5 times with skills and 5 without
 ./run_all.py

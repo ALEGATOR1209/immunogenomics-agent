@@ -58,6 +58,26 @@ docker exec pytcr-agent pi -p "your prompt" \
   --provider llama-cpp --model <model-id>
 ```
 
+### Chatting with Claude instead of a local model
+
+`chat.sh` can also drive pi's *built-in* `anthropic` provider — no extra
+package needed (unlike `llama-cpp`, which comes from the separate
+`pi-llama` install in this directory's `Dockerfile`):
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+./docker-agent/chat.sh --provider anthropic claude-opus-5
+```
+
+The key is read from your current shell and passed into the already-running
+`pytcr-agent` container per invocation (`docker exec -e`) — it's never baked
+into the image, `docker-compose.yml`, or persisted in the container, and
+there's no need to restart the container or re-run `setup.sh` to use it.
+Unlike `llama-cpp`, there's no router to fall back to for model selection —
+`--provider anthropic` requires an explicit model id (e.g. `claude-opus-5`,
+`claude-sonnet-5`, `claude-haiku-4-5`). The container isn't network-isolated,
+so it reaches `api.anthropic.com` over normal egress with no other config.
+
 ## `llama-server.sh` — the model server
 
 Starts llama.cpp in **router mode**, which discovers every GGUF under

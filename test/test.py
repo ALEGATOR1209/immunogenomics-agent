@@ -2,15 +2,27 @@
 """Runs one task directory's evaluation inside an isolated container.
 
 Usage (from inside test/):
-    ./test.py <task-dir-name> [--skills] [--timeout MINUTES] [--n COUNT] [--model MODEL]
+    ./test.py <task-dir-name> [--skills] [--timeout MINUTES] [--n COUNT] [--provider PROVIDER] [--model MODEL]
     MODEL='unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF:Q4_K_XL' ./test.py 01-data-loading --skills
     ./test.py 01-data-loading --model 'ggml-org/Qwen3.6-35B-A3B-GGUF:Q4_K_M'
+    ANTHROPIC_API_KEY=sk-ant-... ./test.py 01-data-loading --provider anthropic --model claude-opus-5
 
---model MODEL: which model id to run, as the llama.cpp router reports it.
-    Precedence: this flag, then the MODEL env var, then - if exactly one
-    model is loaded on the router - that one. The router only serves loaded
-    models, so there's no useful hardcoded default; list them with
-    ../docker-agent/llama-server.sh --list.
+--provider PROVIDER: which pi provider to run the agent through - "llama-cpp"
+    (default) for the host's local llama.cpp router, or "anthropic" for the
+    hosted Claude API (pi's built-in provider - no extra package needed,
+    unlike llama-cpp's pi-llama). anthropic requires ANTHROPIC_API_KEY to be
+    set on the host; it's passed into the container, never baked into the
+    image. Model resolution differs by provider - see --model below.
+
+--model MODEL: which model id to run.
+    llama-cpp: the id as the router reports it. Precedence: this flag, then
+    the MODEL env var, then - if exactly one model is loaded on the router -
+    that one. The router only serves loaded models, so there's no useful
+    hardcoded default; list them with ../docker-agent/llama-server.sh --list.
+    anthropic: a literal Claude model id (e.g. claude-opus-5, claude-sonnet-5,
+    claude-haiku-4-5). Precedence: this flag, then MODEL. No router to fall
+    back to - required outright since any hardcoded default would be wrong
+    most of the time.
 
 --skills: bind-mounts the project's skills/ (read-only) into the container
     at /root/.pi/agent/skills, pi's global auto-discovered skills location
@@ -21,7 +33,9 @@ The model server is llama.cpp's router running natively on the host; the
 container reaches it via host.docker.internal. Start it with
 ../docker-agent/llama-server.sh (which binds 0.0.0.0 - a router on
 127.0.0.1 is invisible to the container). Override the URL with
-LLAMA_BASE_URL.
+LLAMA_BASE_URL. None of this applies to --provider anthropic, which talks
+directly to api.anthropic.com over the container's normal internet egress
+(the container isn't network-isolated - see docker-agent/README.md).
 
 --timeout MINUTES: kill the agent's container if it hasn't finished within
     this many minutes (default: 20). A background thread issues
@@ -75,7 +89,15 @@ HOST_LLAMA_URL = os.environ.get("HOST_LLAMA_URL", "http://127.0.0.1:8080")
 # The provider id registered by git:github.com/huggingface/pi-llama, which
 # docker-agent's Dockerfile installs. Note the hyphen: pi also ships a
 # separate built-in "llama.cpp" (dot) provider, which is NOT this one.
-PI_PROVIDER = "llama-cpp"
+LLAMA_CPP_PROVIDER = "llama-cpp"
+
+# pi's built-in Anthropic provider - already present in pi-coding-agent's
+# own dependencies, unlike llama-cpp which needs the separate pi-llama
+# package. Reads ANTHROPIC_API_KEY from the environment (same resolution
+# order as the Anthropic SDK).
+ANTHROPIC_PROVIDER = "anthropic"
+
+PROVIDERS = (LLAMA_CPP_PROVIDER, ANTHROPIC_PROVIDER)
 
 DOCKERFILE_TEMPLATE = """ARG BASE_IMAGE=pytcr-agent:latest
 FROM ${BASE_IMAGE}
@@ -131,7 +153,8 @@ class QuietArgumentParser(argparse.ArgumentParser):
 
 def parse_args():
     usage = (
-        "Usage: test.py <task-dir-name> [--skills] [--timeout MINUTES] [--n COUNT] [--model MODEL]  "
+        "Usage: test.py <task-dir-name> [--skills] [--timeout MINUTES] [--n COUNT] "
+        "[--provider {llama-cpp,anthropic}] [--model MODEL]  "
         "(run from inside test/, e.g. ./test.py 01-data-loading --skills)"
     )
     parser = QuietArgumentParser(add_help=False, usage=argparse.SUPPRESS)
@@ -139,6 +162,7 @@ def parse_args():
     parser.add_argument("--skills", action="store_true")
     parser.add_argument("--timeout", type=int, default=20)
     parser.add_argument("--n", type=int, default=1)
+    parser.add_argument("--provider", type=str, choices=PROVIDERS, default=LLAMA_CPP_PROVIDER)
     parser.add_argument("--model", type=str, default=None)
     try:
         args = parser.parse_args()
@@ -165,24 +189,35 @@ def router_models():
         return None
 
 
-def get_model_server():
+def get_model_server(provider):
     """What eval_result.json records as having served the model. The router
-    reports no version of its own, so this is the server kind plus whether it
-    was actually reachable at run time."""
+    reports no version of its own, so for llama-cpp this is the server kind
+    plus whether it was actually reachable at run time; anthropic talks
+    directly to the hosted API, so there's no local reachability to check."""
+    if provider == ANTHROPIC_PROVIDER:
+        return "anthropic"
     return "llama.cpp" if router_models() is not None else "llama.cpp (unreachable)"
 
 
-def resolve_model(explicit):
-    """--model, else MODEL, else the single loaded model on the router.
+def resolve_model(explicit, provider):
+    """--model, else MODEL, else - for llama-cpp only - the single loaded
+    model on the router.
 
-    There is deliberately no hardcoded default: the router serves only models
-    that are currently loaded, so any fixed id would be wrong most of the
-    time. Failing loudly here beats a run that dies inside the container with
-    an opaque 400 "model is not loaded"."""
+    There is deliberately no hardcoded default: for llama-cpp the router
+    serves only models that are currently loaded, so any fixed id would be
+    wrong most of the time; for anthropic there's no router to fall back to
+    at all. Failing loudly here beats a run that dies inside the container
+    with an opaque error."""
     if explicit:
         return explicit
     if os.environ.get("MODEL"):
         return os.environ["MODEL"]
+
+    if provider == ANTHROPIC_PROVIDER:
+        die(
+            "No --model/MODEL given for --provider anthropic.\n"
+            "  Pass a Claude model id, e.g. --model claude-opus-5"
+        )
 
     models = router_models()
     if models is None:
@@ -362,8 +397,9 @@ def stream_docker_run(cmd, log_file, pretty_file, container_name):
         return proc.returncode, interrupted
 
 
-def run_once(task_name, task_dir, task_image, prompt, model, model_server, memory_gb, use_skills, timeout_min, iter_num, n):
-    run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+def run_once(task_name, task_dir, task_image, prompt, model, model_server, provider, memory_gb, use_skills, timeout_min, iter_num, n):
+    start_dt = datetime.now()
+    run_id = start_dt.strftime("%Y%m%d_%H%M%S")
     if n > 1:
         run_id = f"{run_id}_{iter_num}"
     run_dir = task_dir / "runs" / run_id
@@ -384,6 +420,7 @@ def run_once(task_name, task_dir, task_image, prompt, model, model_server, memor
 
     header = (
         f"=== Task: {task_name} ===\n"
+        f"=== Start: {start_dt.isoformat()} ===\n"
         f"=== Model: {model} ===\n"
         f"=== Harness: pi ===\n"
         f"=== Model server: {model_server} ===\n"
@@ -402,13 +439,21 @@ def run_once(task_name, task_dir, task_image, prompt, model, model_server, memor
         # arrangement the opencode setup had with ~/.claude/skills.
         skills_mount = ["-v", f"{REPO_ROOT / 'skills'}:/root/.pi/agent/skills:ro"]
 
+    # Only one of these is ever passed in: LLAMA_BASE_URL for the local
+    # router, ANTHROPIC_API_KEY for the hosted API - never both, so a
+    # llama-cpp run's container never sees a stray API key and vice versa.
+    if provider == ANTHROPIC_PROVIDER:
+        provider_env = ["-e", f"ANTHROPIC_API_KEY={os.environ['ANTHROPIC_API_KEY']}"]
+    else:
+        provider_env = ["-e", f"LLAMA_BASE_URL={CONTAINER_LLAMA_URL}"]
+
     docker_cmd = [
         "docker", "run", "--rm",
         "--name", container_name,
         "--add-host=host.docker.internal:host-gateway",
         "--cap-drop=ALL", "--security-opt", "no-new-privileges:true",
         "--memory", f"{memory_gb}g",
-        "-e", f"LLAMA_BASE_URL={CONTAINER_LLAMA_URL}",
+        *provider_env,
         "-v", f"{run_dir / 'workspace'}:/root/task",
         "-v", f"{task_dir / 'data'}:/root/task/data:ro",
         *skills_mount,
@@ -420,7 +465,7 @@ def run_once(task_name, task_dir, task_image, prompt, model, model_server, memor
         # project-local resources for this run; --no-session keeps runs from
         # accumulating session files in the container.
         "pi", "-p", "--mode", "json", "--approve", "--no-session",
-        "--provider", PI_PROVIDER, "--model", model, prompt,
+        "--provider", provider, "--model", model, prompt,
     ]
 
     timed_out_event = threading.Event()
@@ -467,6 +512,7 @@ def run_once(task_name, task_dir, task_image, prompt, model, model_server, memor
         capture_output=True, text=True, check=True,
     )
     eval_data = json.loads(grade_result.stdout)
+    eval_data["start_time"] = start_dt.isoformat()
     eval_data["timed_out"] = timed_out
     eval_data["interrupted"] = interrupted
     eval_data["model"] = model
@@ -489,8 +535,10 @@ def run_once(task_name, task_dir, task_image, prompt, model, model_server, memor
 
 def main():
     args = parse_args()
-    model = resolve_model(args.model)
-    model_server = get_model_server()
+    if args.provider == ANTHROPIC_PROVIDER and not os.environ.get("ANTHROPIC_API_KEY"):
+        die("ANTHROPIC_API_KEY is not set - required for --provider anthropic.")
+    model = resolve_model(args.model, args.provider)
+    model_server = get_model_server(args.provider)
     memory_gb = os.environ.get("MEMORY_GB", "8")
 
     task_dir = SCRIPT_DIR / args.task_name
@@ -522,7 +570,7 @@ def main():
         if args.n > 1:
             log(f"=== Run {i}/{args.n} ===")
         status, interrupted = run_once(
-            args.task_name, task_dir, task_image, prompt, model, model_server, memory_gb,
+            args.task_name, task_dir, task_image, prompt, model, model_server, args.provider, memory_gb,
             args.skills, args.timeout, i, args.n,
         )
         statuses.append(status)
