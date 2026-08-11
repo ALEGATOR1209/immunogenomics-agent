@@ -5,7 +5,7 @@ description: Quality-control, normalize, and select features for the gene expres
 
 # scRNA-seq (GEX) Quality Control and Preprocessing
 
-Run this on the `gex` modality of a scirpy `MuData` object or on a gene expression `AnnData` object once it has been loaded (see `pytcr-data-loading`). GEX QC/normalization should be complete before any GEX embedding, clustering, or `pytcr-gex-integration` step.
+Run this on the `gex` modality of a scirpy `MuData` object or on a gene expression `AnnData` object once it has been loaded (see `pytcr-data-loading`). GEX QC/normalization should be complete before any GEX embedding, clustering, or `pytcr-gex-integration` step. Every `.pl.*` call below has a no-plot, data-only alternative next to it — for agents that can't process images.
 
 ## Setup
 
@@ -43,6 +43,13 @@ sc.pl.violin(gex, ["n_genes_by_counts", "total_counts", "pct_counts_mt"], jitter
 sc.pl.scatter(gex, "total_counts", "n_genes_by_counts", color="pct_counts_mt")
 ```
 
+> **No-plot alternative:** the same distributions as summary statistics, for picking filtering thresholds.
+> ```python
+> gex.obs[["n_genes_by_counts", "total_counts", "pct_counts_mt"]].describe()
+> gex.obs[["n_genes_by_counts", "total_counts", "pct_counts_mt"]].quantile([0.01, 0.05, 0.5, 0.95, 0.99])
+> gex.obs.groupby("<sample_col>")[["n_genes_by_counts", "total_counts", "pct_counts_mt"]].describe()
+> ```
+
 Use these to decide filtering thresholds. If the dataset has multiple batches/samples, inspect QC metrics per-sample — thresholds can vary substantially between batches.
 
 ## 2. Filter cells and genes
@@ -77,12 +84,9 @@ gex = gex[~gex.obs["predicted_doublet"].to_numpy()].copy()
 Preserve raw counts, then apply median count-depth scaling with log1p transformation:
 
 ```python
-# Saving count data
 gex.layers["counts"] = gex.X.copy()
 
-# Normalizing to median total counts
 sc.pp.normalize_total(gex)
-# Logarithmize the data
 sc.pp.log1p(gex)
 ```
 
@@ -95,6 +99,12 @@ sc.pp.highly_variable_genes(gex, n_top_genes=2000, batch_key="<sample_col>")
 sc.pl.highly_variable_genes(gex)
 ```
 
+> **No-plot alternative:** the same mean-expression-vs-dispersion info as columns instead of a scatter plot.
+> ```python
+> gex.var["highly_variable"].sum()   # number of HVGs selected
+> gex.var[["means", "dispersions", "dispersions_norm", "highly_variable"]]
+> ```
+
 ## 6. Sync back to MuData
 
 If any cell filtering was applied (step 2 or 3), write the modality back and resync `mdata.obs`:
@@ -106,34 +116,41 @@ mdata.update()
 
 ## 7. (Optional) Dimensionality Reduction
 
-When preparing user-facing output, working with cell type annotation or clustering in downstream analysis, visualize the cellular composition. The typical approach is PCA -> KNN -> UMAP:
+For user-facing output, cell-type annotation, or downstream clustering, visualize the cellular composition via PCA -> neighbor graph -> UMAP:
 
 ```python
-# perform PCA dimensionality reduction
 sc.tl.pca(adata)
+sc.pl.pca_variance_ratio(adata, n_pcs=50, log=True)  # variance contributed by each PC
+```
 
-# display a plot of how much each principal component contributes to the total variance
-sc.pl.pca_variance_ratio(adata, n_pcs=50, log=True)
+> **No-plot alternative:** the same per-PC variance curve as numbers, for picking how many PCs to keep.
+> ```python
+> adata.uns["pca"]["variance_ratio"]              # per-PC variance ratio
+> adata.uns["pca"]["variance_ratio"].cumsum()      # cumulative variance explained
+> ```
 
-# calculate neighbourhood based on PCA
+```python
 sc.pp.neighbors(adata)
-
-# calculate UMAP representation
 sc.tl.umap(adata)
-
-# visualize UMAP
 sc.pl.umap(adata, color="sample")
 ```
 
-Based on neigbourhood graph, you can calculate cell clusters. It can help you later with cell annotation or with comparing cells between patients and conditions:
+> **No-plot alternative:** cell counts per sample instead of a colored scatter.
+> ```python
+> adata.obs["sample"].value_counts()
+> ```
+
+Leiden clustering on the neighbor graph helps with cell annotation and with comparing cells across patients/conditions:
 
 ```python
-# calculate clusters using Leiden method
 sc.tl.leiden(adata, flavor="igraph")
-
-# display clusters on UMAP
 sc.pl.umap(adata, color=["leiden"])
 ```
+
+> **No-plot alternative:** the same "how do clusters/samples relate" info as a table instead of a colored scatter.
+> ```python
+> adata.obs.groupby("leiden")["sample"].value_counts(normalize=True)
+> ```
 
 ## Post-preprocessing
 

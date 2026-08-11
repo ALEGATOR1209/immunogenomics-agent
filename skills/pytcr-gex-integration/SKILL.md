@@ -5,12 +5,13 @@ description: Integrate gene expression (GEX) data with immune-receptor clonotype
 
 # Integrating Gene Expression Data
 
-Run this after `pytcr-clonotype-clustering` and `pytcr-clonotype-analysis`, once `mdata["gex"]` has a computed embedding/clustering (e.g. `gex:umap`, `gex:cluster`) and `mdata.obs` has clonotype IDs. This skill covers cross-modality analyses that combine transcriptomics with receptor identity: clonotype modularity, clonotype imbalance across cell clusters, repertoire overlap between cell types, and marker-gene analysis of specific clonotypes.
+Run this after `pytcr-clonotype-clustering` and `pytcr-clonotype-analysis`, once `mdata["gex"]` has a computed embedding/clustering (e.g. `gex:umap`, `gex:cluster`) and `mdata.obs` has clonotype IDs. Cross-modality analyses combining transcriptomics with receptor identity. Every `.pl.*` call below has a no-plot, data-only alternative next to it — for agents that can't process images.
 
 ## Setup
 
 ```python
 import muon as mu
+import pandas as pd
 import scanpy as sc
 import scirpy as ir
 from cycler import cycler
@@ -22,7 +23,7 @@ from matplotlib import pyplot as plt
 
 ## 1. Clonotype modularity
 
-Clonotype modularity identifies clonotypes (or clonotype clusters) whose cells are transcriptionally *more similar to each other than expected by chance*. The score is the log2 fold change of edges in the cell-cell neighborhood graph within the clonotype, versus a random background model. A high score means the clonotype has a consistent molecular phenotype.
+Clonotype modularity flags clonotypes (or clusters) whose cells are transcriptionally *more similar to each other than expected by chance* — the log2 fold change of cell-cell neighborhood-graph edges within the clonotype vs. a random background model. A high score means a consistent molecular phenotype.
 
 ### 1a. Compute
 
@@ -54,6 +55,11 @@ As a one-sided volcano plot (modularity score vs. FDR):
 ir.pl.clonotype_modularity(mdata, base_size=20)
 ```
 
+> **No-plot alternative:** none of these three plots are needed to rank or threshold clonotypes by modularity — the score and its FDR are already plain `obs` columns from Step 1a. See 1c below for the ranking snippet; the FDR sits alongside it in `mdata.obs["airr:clonotype_modularity_fdr"]`.
+> ```python
+> mdata.obs.set_index("<cc_col>")[["airr:clonotype_modularity", "airr:clonotype_modularity_fdr"]].drop_duplicates().sort_values("airr:clonotype_modularity", ascending=False)
+> ```
+
 ### 1c. Inspect top-scoring clonotypes
 
 Extract the N clonotypes with the highest modularity:
@@ -79,6 +85,11 @@ mu.pl.embedding(
 )
 ```
 
+> **No-plot alternative:** the same localization question — do these clonotypes concentrate in one transcriptional cluster — as a cross-tab.
+> ```python
+> pd.crosstab(mdata.obs["<cc_col>"], mdata.obs["<cluster_col>"]).loc[clonotypes_top_modularity]
+> ```
+
 ### 1d. Differential expression of top clonotypes vs. the rest
 
 `sc.tl.rank_genes_groups` doesn't understand `MuData`, so temporarily attach the clonotype column to the GEX `AnnData` with `ir.get.obs_context`:
@@ -90,6 +101,13 @@ with ir.get.obs_context(mdata["gex"], {"cc_aa_tcrdist": mdata.obs["<cc_col>"]}) 
     for ct, ax in zip(clonotypes_top_modularity, axs, strict=False):
         sc.pl.rank_genes_groups_violin(tmp_ad, groups=[ct], n_genes=15, ax=ax, show=False, strip=False)
 ```
+
+> **No-plot alternative:** per-gene scores/fold-changes/adjusted p-values as a DataFrame — the sign of `logfoldchanges` says up or down, no violin shape-reading needed.
+> ```python
+> for ct in clonotypes_top_modularity:
+>     df = sc.get.rank_genes_groups_df(tmp_ad, group=ct)
+>     print(ct, df.head(15))  # or df.set_index("names").loc["<gene>", "logfoldchanges"] for one gene
+> ```
 
 ---
 
@@ -111,7 +129,7 @@ freq, stat = ir.tl.clonotype_imbalance(
 top_differential_clonotypes = stat["clone_id"].tolist()[:3]
 ```
 
-Visualize the cluster assignment alongside the top differential clonotypes to confirm they are enriched in one cluster over the other:
+Visualize the cluster assignment against the top differential clonotypes to confirm enrichment in one cluster over the other:
 
 ```python
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4), gridspec_kw={"wspace": 0.6})
@@ -127,6 +145,12 @@ mu.pl.embedding(
 )
 ```
 
+> **No-plot alternative:** the enrichment answer already lives in `stat` from the `ir.tl.clonotype_imbalance` call above — no embedding needed to confirm it.
+> ```python
+> stat[["clone_id", "pval", "logFC"]].head()
+> ```
+> `freq` (the other return value) holds per-sample abundance if a numeric cross-check against a specific sample/cluster is needed.
+
 ---
 
 ## 3. Repertoire overlap of cell types
@@ -136,6 +160,15 @@ The same `ir.pl.repertoire_overlap` used for cross-sample comparison (see `pytcr
 ```python
 _ = ir.pl.repertoire_overlap(mdata, "<cluster_col>", pair_to_plot=["<case_label>", "<control_label>"], fig_kws={"dpi": 120})
 ```
+
+> **No-plot alternative:** the pairwise overlap value(s) directly, no scatterplot needed. `df` is a group × clonotype abundance matrix and `dst` a condensed (1-D) `pdist` array — pair `squareform(dst)` with `df.index` for a named lookup (see `pytcr-repertoire-comparison` for the same pattern in more detail):
+> ```python
+> from scipy.spatial.distance import squareform
+>
+> df, dst, lk = ir.tl.repertoire_overlap(mdata, "<cluster_col>", inplace=False)
+> df.loc[["<case_label>", "<control_label>"], :].T          # per-clonotype abundance in both groups
+> pd.DataFrame(squareform(dst), index=df.index, columns=df.index).loc["<case_label>", "<control_label>"]  # Jaccard distance
+> ```
 
 Useful for checking whether two functionally related cell states (e.g. effector vs. tissue-resident memory) draw from overlapping or distinct clonotype pools.
 
@@ -151,10 +184,13 @@ with ir.get.obs_context(mdata["gex"], {"clone_id": mdata.obs["airr:clone_id"]}) 
     sc.pl.rank_genes_groups_violin(tmp_ad, groups="<clonotype_a>", n_genes=15)
 ```
 
+> **No-plot alternative:** same as Step 1d — per-gene scores/fold-changes/adjusted p-values as a DataFrame.
+> ```python
+> sc.get.rank_genes_groups_df(tmp_ad, group="<clonotype_a>").head(15)
+> ```
+
 ---
 
 ## Post-analysis
 
-The remaining natural next step is:
-
-- **Epitope database query**: `ir.pp.ir_dist` + `ir.tl.ir_query` + `ir.tl.ir_query_annotate`, to annotate clonotypes against known antigen-specificity databases.
+Natural next step: epitope-database query (`ir.pp.ir_dist` + `ir.tl.ir_query`/`ir.tl.ir_query_annotate`) to annotate clonotypes against known antigen-specificity databases.

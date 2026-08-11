@@ -5,11 +5,12 @@ description: Query epitope reference databases (e.g. IggyTop, aggregating IEDB/V
 
 # Epitope Database Query
 
-Annotates cells with known antigen specificity by matching their CDR3 sequences against a reference database. Uses the same `ir_dist`/`ir_query` machinery as clonotype clustering (see `pytcr-clonotype-clustering`), but the "reference" is an external database instead of the dataset itself.
+Uses the same `ir_dist`/`ir_query` machinery as clonotype clustering (see `pytcr-clonotype-clustering`), but the "reference" is an external database instead of the dataset itself. Every `.pl.*` call below has a no-plot, data-only alternative next to it — for agents that can't process images.
 
 ## Setup
 
 ```python
+import pandas as pd
 import scirpy as ir
 ```
 
@@ -80,5 +81,11 @@ ir.tl.ir_query_annotate(
 ```python
 mu.pl.embedding(mdata, "gex:umap", color="airr:antigen_species")
 ```
+
+> **No-plot alternative:** the annotation counts and its localization against a cluster/cell-type column, instead of eyeballing the UMAP.
+> ```python
+> mdata.obs["airr:antigen_species"].value_counts()
+> pd.crosstab(mdata.obs["<cluster_col>"], mdata.obs["airr:antigen_species"])
+> ```
 
 Requires GEX UMAP (see `pytcr-sc-rnaseq-preprocessing`).

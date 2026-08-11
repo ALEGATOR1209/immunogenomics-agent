@@ -5,7 +5,7 @@ description: Define clonotypes and clonotype clusters from AIRR data using scirp
 
 # Clonotype Definition and Clustering
 
-Run this after `pytcr-preprocess`. Defines clonotypes (exact CDR3 nucleotide identity) and clonotype clusters (CDR3 amino-acid similarity).
+Run this after `pytcr-preprocess`. Defines clonotypes (exact CDR3 nucleotide identity) and clonotype clusters (CDR3 amino-acid similarity). Every `.pl.*` call below has a no-plot, data-only alternative next to it — for agents that can't process images.
 
 ## Setup
 
@@ -43,6 +43,14 @@ ir.tl.clonotype_network(mdata, min_cells=2)  # raise min_cells to reduce noise i
 _ = ir.pl.clonotype_network(mdata, color="<color_col>", base_size=20, label_fontsize=9, panel_size=(7, 7))
 ```
 
+> **No-plot alternative:** network topology (node/edge counts, connected-component sizes) and public-vs-private status by patient, without rendering the layout.
+> ```python
+> graph, layout = ir.tl.clonotype_network_igraph(mdata)
+> graph.vcount(), graph.ecount()                                    # node/edge counts
+> graph.clusters().sizes()                                          # connected-component sizes
+> mdata.obs.groupby("airr:clone_id")["<patient_col>"].nunique() > 1  # True = public (spans >1 patient)
+> ```
+
 `<color_col>` is any `mdata.obs` column (e.g. `"gex:sample"`, `"gex:patient"`). Node = unique receptor configuration, node size = cell count; categorical colors render as pie charts.
 
 ---
@@ -71,7 +79,15 @@ ir.tl.clonotype_network(mdata, min_cells=3, sequence="aa", metric="tcrdist")
 _ = ir.pl.clonotype_network(mdata, color="<color_col>", base_size=20, label_fontsize=9, panel_size=(7, 7))
 ```
 
-Now each connected subgraph (not each dot) is a clonotype cluster. Color by patient/sample to spot **public** clusters (shared across patients — interesting, suggests convergent recognition) vs. **private** ones (single patient).
+> **No-plot alternative:** same as Step 2's network callout, now at the cluster level (per-cluster cell counts are in the callout below).
+> ```python
+> graph, layout = ir.tl.clonotype_network_igraph(mdata)
+> graph.vcount(), graph.ecount()                                            # node/edge counts
+> graph.clusters().sizes()                                                  # connected-component sizes
+> mdata.obs.groupby("airr:cc_aa_tcrdist")["<patient_col>"].nunique() > 1    # True = public (spans >1 patient)
+> ```
+
+Each connected subgraph (not each dot) is now a clonotype cluster. Color by patient/sample to spot **public** clusters (shared across patients, suggesting convergent recognition) vs. **private** ones (single patient).
 
 > **Getting cluster/network sizes:** `ir.tl.clonotype_network` only computes plot layout — it has no queryable size/membership output. Use the `_size` columns instead:
 > ```python
@@ -127,8 +143,4 @@ ct_different_v[ct_different_v].index.tolist()
 
 ## Post-clustering
 
-- **Clonal expansion**: `ir.tl.clonal_expansion` → `ir.pl.clonal_expansion`
-- **Diversity**: `ir.pl.alpha_diversity`
-- **Repertoire overlap across samples**: `ir.tl.repertoire_overlap` → `ir.pl.repertoire_overlap`
-- **Convergent evolution**: `ir.tl.clonotype_convergence`
-- **Epitope database query**: `ir.pp.ir_dist` + `ir.tl.ir_query` + `ir.tl.ir_query_annotate`
+Natural next steps: clonal expansion (`ir.tl.clonal_expansion`/`ir.pl.clonal_expansion`), diversity (`ir.pl.alpha_diversity`), cross-sample repertoire overlap (`ir.tl.repertoire_overlap`/`ir.pl.repertoire_overlap`), convergent evolution (`ir.tl.clonotype_convergence`), and epitope-database query (`ir.pp.ir_dist` + `ir.tl.ir_query`/`ir.tl.ir_query_annotate`).

@@ -5,7 +5,7 @@ description: Preprocess and quality-control AIRR (TCR/BCR) data in a scirpy MuDa
 
 # AIRR Data Preprocessing and Quality Control
 
-Run this after loading AIRR data (see `pytcr-data-loading` skill). These steps must be completed before any clonotype analysis.
+Run this after loading AIRR data (see `pytcr-data-loading` skill). These steps must be completed before any clonotype analysis. Every `.pl.*` call below has a no-plot, data-only alternative next to it — for agents that can't process images.
 
 > If `mdata` also has a `gex` (transcriptomics) modality, this skill only covers the `airr` side. QC, normalization, and feature selection of the scRNA-seq data **must** be performed separately. Use the `pytcr-sc-rnaseq-preprocessing` skill for that (can run before/after/in parallel).
 
@@ -14,12 +14,13 @@ Run this after loading AIRR data (see `pytcr-data-loading` skill). These steps m
 ```python
 import muon as mu
 import numpy as np
+import pandas as pd
 import scirpy as ir
 ```
 
 ## 1. Index chains
 
-Build chain indices so scirpy can apply its receptor model to the raw AIRR data. This separates chains into VJ and VDJ categories, enforces the two-pair-per-cell limit, and flags cells with excess chains as multichain.
+Build chain indices so scirpy can apply its receptor model: separates chains into VJ/VDJ categories, enforces the two-pair-per-cell limit, and flags excess-chain cells as multichain.
 
 ```python
 ir.pp.index_chains(mdata)
@@ -67,7 +68,11 @@ _ = ir.pl.group_abundance(mdata, groupby="airr:receptor_subtype", target_col="<g
 _ = ir.pl.group_abundance(mdata, groupby="airr:chain_pairing", target_col="<group_col>")
 ```
 
-Use these plots to understand the composition before filtering. Alternatively, inspect `airr:receptor_subtype` and `airr:chain_pairing` directly.
+> **No-plot alternative:** the same counts/fractions as a DataFrame instead of a bar chart — `ir.tl.group_abundance` is the plotting function's own backend and always returns them directly.
+> ```python
+> ir.tl.group_abundance(mdata, groupby="airr:receptor_subtype", target_col="<group_col>", fraction=True)
+> ir.tl.group_abundance(mdata, groupby="airr:chain_pairing", target_col="<group_col>", fraction=True)
+> ```
 
 ## 3. Filter multichain cells
 
@@ -79,6 +84,12 @@ Optionally inspect them on a UMAP first (requires GEX UMAP to be available, see 
 mu.pl.embedding(mdata, basis="gex:umap", color="airr:chain_pairing", groups="multichain")
 ```
 
+> **No-plot alternative:** the same composition/distribution without an embedding.
+> ```python
+> mdata.obs["airr:chain_pairing"].value_counts()
+> pd.crosstab(mdata.obs["<cluster_or_sample_col>"], mdata.obs["airr:chain_pairing"])
+> ```
+
 Then filter:
 
 ```python
@@ -87,35 +98,18 @@ mu.pp.filter_obs(mdata, "airr:chain_pairing", lambda x: x != "multichain")
 
 ## 4. Orphan-chain cells — ask the user
 
-Before filtering orphan-chain cells, ask the user how they would like to handle them. Present the following options and their trade-offs:
+Before filtering orphan-chain cells, ask the user how to handle them:
 
-**Option A — Remove orphan-chain cells (most common)**
-
-Keep only cells that have at least one complete receptor pair (VJ + VDJ):
-
+**Option A — Remove them (most common).** Required for most paired-chain analyses (clonotype definition, `ir.tl.define_clonotypes` with `receptor_arms="all"`); cleans the dataset but loses cells that genuinely express only one chain.
 ```python
 mu.pp.filter_obs(mdata, "airr:chain_pairing", lambda x: ~np.isin(x, ["orphan VJ", "orphan VDJ"]))
 ```
 
-- **When to use:** Most paired-chain analyses (clonotype definition, TCR/BCR repertoire analysis). Required for `ir.tl.define_clonotypes` with `receptor_arms="all"`.
-- **Pro:** Clean dataset; avoids incomplete receptors biasing clonotype stats.
-- **Con:** Loses real biology — some cells genuinely express only one chain.
+**Option B — Keep them, unfiltered.** Best for γ/δ TCR studies (δ chains often missing), single-chain-focused analyses, or low-depth data where orphans are common; retains all cells, though they're invisible to paired-chain analyses regardless (`receptor_arms="all"` excludes them anyway).
 
-**Option B — Keep orphan-chain cells**
+**Option C — Keep and label.** No filtering; use the `airr:chain_pairing` column later to subset paired vs. unpaired cells for exploratory comparison.
 
-Do not filter on `chain_pairing` at all.
-
-- **When to use:** γ/δ TCR studies (δ chains are often missing); analyses that focus on individual chains; datasets where low sequencing depth makes orphan chains common.
-- **Pro:** Retains all cells for downstream analysis.
-- **Con:** Orphan-chain cells are invisible to paired-chain analyses (e.g. `define_clonotypes` with `receptor_arms="all"` will effectively exclude them anyway).
-
-**Option C — Keep but label**
-
-Keep orphan cells and use them only in single-chain analyses. No filtering needed; the `airr:chain_pairing` column can be used later to subset.
-
-- **When to use:** Exploratory analysis where you want to compare paired vs. unpaired populations.
-
-Once the user has decided, apply their chosen option before continuing.
+Apply the chosen option before continuing.
 
 ## 5. Synchronize MuData
 
@@ -132,6 +126,11 @@ Re-plot chain pairing to confirm the outcome matches expectations:
 ```python
 _ = ir.pl.group_abundance(mdata, groupby="airr:chain_pairing", target_col="<group_col>")
 ```
+
+> **No-plot alternative:** confirm the post-filter counts numerically.
+> ```python
+> ir.tl.group_abundance(mdata, groupby="airr:chain_pairing", target_col="<group_col>", fraction=True)
+> ```
 
 Also check cell counts:
 
