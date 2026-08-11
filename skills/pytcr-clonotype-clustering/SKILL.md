@@ -5,7 +5,7 @@ description: Define clonotypes and clonotype clusters from AIRR data using scirp
 
 # Clonotype Definition and Clustering
 
-Run this after `pytcr-preprocess`. This skill defines clonotypes (exact nucleotide identity) and clonotype clusters (amino-acid sequence similarity).
+Run this after `pytcr-preprocess`. Defines clonotypes (exact CDR3 nucleotide identity) and clonotype clusters (CDR3 amino-acid similarity).
 
 ## Setup
 
@@ -15,154 +15,73 @@ import scirpy as ir
 
 ---
 
-## Step 1 — Ask the user about `receptor_arms`
+## Step 1 — Ask the user for two parameters
 
-Before generating any code, ask the user which receptor arms must match for two cells to be considered the same clonotype or cluster. Present the options:
+**`receptor_arms`** — which chains must match for two cells to be grouped:
+- `"all"` (default if no answer given) — both VJ (e.g. TRA/IGK/IGL) and VDJ (e.g. TRB/IGH) chains must match. Standard paired-chain analysis; precise, but excludes cells with a missing/orphan chain.
+- `"any"` — a match on either arm is enough. Use for frequent chain dropout, epitope-DB queries, or exploratory analysis; more sensitive, but can merge biologically distinct clonotypes.
 
-**`receptor_arms="all"` (most stringent)**
-Both the VJ chain (e.g. TRA/IGK/IGL) and the VDJ chain (e.g. TRB/IGH) must match.
-- **Use when:** Standard TCR/BCR paired-chain analysis. Ensures clonotypes represent cells that share the same complete receptor.
-- **Pro:** Biologically precise; fewer false-positive clonotype groupings.
-- **Con:** Cells with a missing chain (orphan) are effectively excluded.
+**`dual_ir`** — how to treat cells with two receptor pairs (~30% of T cells):
+- `"primary_only"` (recommended for clonotype definition) — only the primary (highest-UMI) pair is used.
+- `"any"` (recommended for clonotype clusters) — a match on either the primary or secondary pair counts; more inclusive, can merge clonotypes sharing only a secondary chain.
 
-**`receptor_arms="any"` (permissive)**
-A match on either the VJ or the VDJ arm is sufficient.
-- **Use when:** Datasets with frequent chain dropout; querying epitope databases; exploratory analysis.
-- **Pro:** Higher sensitivity; captures partial matches.
-- **Con:** May group biologically distinct clonotypes that share only one chain.
+Use the chosen `<receptor_arms>`/`<dual_ir>` values in every step below.
 
 ---
 
-## Step 2 — Ask the user about `dual_ir`
-
-Ask the user how to handle cells with two receptor pairs (dual IR cells). Present the options:
-
-**`dual_ir="primary_only"` (recommended for clonotype definition)**
-Only the primary (highest-UMI) chain pair is considered for matching.
-- **Use when:** Strict clonotype identity. ~30% of T cells can carry dual TCRs — this setting ignores the secondary pair and treats these cells like single-receptor cells.
-- **Pro:** Consistent with traditional clonotype definitions; simpler interpretation.
-- **Con:** Ignores secondary receptor information.
-
-**`dual_ir="any"` (recommended for clonotype clusters)**
-A match on either the primary or the secondary chain pair counts.
-- **Use when:** Clonotype cluster / similarity analysis where you want to capture cells that share any receptor configuration.
-- **Pro:** More inclusive; captures biologically related cells with dual receptors.
-- **Con:** Can merge clonotypes that share only a secondary chain.
-
-Once the user has decided on both parameters, proceed with the steps below using their chosen values.
-
----
-
-## Step 3 — Define clonotypes (nucleotide-sequence identity)
-
-Clonotypes are groups of cells with identical CDR3 nucleotide sequences. This is the most stringent level of clonal grouping.
-
-### 3a. Compute nucleotide distance matrices
+## Step 2 — Define clonotypes (nucleotide identity)
 
 ```python
-ir.pp.ir_dist(mdata)
-```
-
-Default: nucleotide sequences, identity metric. Stores two sparse distance matrices in `mdata["airr"].uns` — one for VJ sequences, one for VDJ sequences.
-
-### 3b. Define clonotypes
-
-Use the `receptor_arms` and `dual_ir` values chosen above:
-
-```python
+ir.pp.ir_dist(mdata)  # default: nucleotide sequences, identity metric
 ir.tl.define_clonotypes(mdata, receptor_arms="<receptor_arms>", dual_ir="<dual_ir>")
 ```
 
-Adds to `mdata.obs`:
-- `airr:clone_id` — clonotype label
-- `airr:clone_id_size` — number of cells in the clonotype
-
-### 3c. Compute network layout
+Adds `mdata.obs["airr:clone_id"]` (label) and `["airr:clone_id_size"]` (cell count).
 
 ```python
-ir.tl.clonotype_network(mdata, min_cells=2)
-```
-
-`min_cells` controls the minimum clonotype size shown. Increase it to reduce noise in large datasets.
-
-### 3d. Visualize
-
-Replace `<color_col>` with a column from `mdata.obs` (e.g. `"gex:sample"`, `"gex:cluster"`, `"gex:patient"`):
-
-```python
+ir.tl.clonotype_network(mdata, min_cells=2)  # raise min_cells to reduce noise in large datasets
 _ = ir.pl.clonotype_network(mdata, color="<color_col>", base_size=20, label_fontsize=9, panel_size=(7, 7))
 ```
 
-Each node represents a unique receptor configuration. Node size = number of cells. Categorical variables can be rendered as pie charts.
+`<color_col>` is any `mdata.obs` column (e.g. `"gex:sample"`, `"gex:patient"`). Node = unique receptor configuration, node size = cell count; categorical colors render as pie charts.
 
 ---
 
-## Step 4 — Define clonotype clusters (amino-acid sequence similarity)
+## Step 3 — Define clonotype clusters (amino-acid similarity)
 
-Clonotype clusters group cells by CDR3 amino-acid similarity rather than exact identity. This reveals convergent evolution — different clones that likely recognize the same antigen.
-
-### 4a. Compute amino-acid distance matrices
+Reveals convergent recognition: different clones with similar CDR3s that likely target the same antigen.
 
 ```python
-ir.pp.ir_dist(
-    mdata,
-    metric="tcrdist",
-    sequence="aa",
-    cutoff=15,
-)
+ir.pp.ir_dist(mdata, metric="tcrdist", sequence="aa", cutoff=15)
 ```
 
-`metric="tcrdist"` uses the [BLOSUM62](https://en.wikipedia.org/wiki/BLOSUM) substitution matrix, following the approach proposed by Dash et al. (based on the `tcrdist3` implementation). `cutoff=15` means cells with CDR3 distance ≤ 15 are considered similar — for reference, a distance of `12` is equivalent to two `R`s mutating into `K`s under the default parameters. Adjust `cutoff` based on how strictly you want to define similarity; lower values = tighter clusters.
-
-Alternatively, use `base_matrix="tcrblosum"` for [TCRBLOSUM](https://doi.org/10.1093/bib/bbae602) alpha/beta-specific substitution matrices.
-
-Cells are connected in the network when their CDR3 sequence distance is at or below `cutoff`. With `receptor_arms="all", dual_ir="any"`, this must hold for both receptor arms (VJ and VDJ chains), considering any possible dual immune receptor chain pairing.
-
-### 4b. Define clonotype clusters
-
-Use the `receptor_arms` and `dual_ir` values chosen above:
+`cutoff` is the max CDR3 distance (BLOSUM62-based) to count as similar — lower = tighter clusters. (`base_matrix="tcrblosum"` is an alternative alpha/beta-specific substitution matrix.)
 
 ```python
 ir.tl.define_clonotype_clusters(
-    mdata,
-    sequence="aa",
-    metric="tcrdist",
-    receptor_arms="<receptor_arms>",
-    dual_ir="<dual_ir>",
+    mdata, sequence="aa", metric="tcrdist",
+    receptor_arms="<receptor_arms>", dual_ir="<dual_ir>",
 )
 ```
 
-Adds to `mdata.obs`:
-- `airr:cc_aa_tcrdist` — cluster label
-- `airr:cc_aa_tcrdist_size` — number of cells in the cluster
-
-### 4c. Compute network layout
+Adds `mdata.obs["airr:cc_aa_tcrdist"]` (label) and `["airr:cc_aa_tcrdist_size"]` (cell count).
 
 ```python
 ir.tl.clonotype_network(mdata, min_cells=3, sequence="aa", metric="tcrdist")
-```
-
-> **Finding network/cluster sizes:** don't try to extract component or size data from `ir.tl.clonotype_network`'s return value or from `mdata` after calling it — that function only computes plot-layout coordinates for `ir.pl.clonotype_network`, not queryable component membership or sizes. The per-cluster cell count is already available as `airr:cc_aa_tcrdist_size` (added in step 4b). "Size of the largest network/cluster" is the number of *cells*, not the number of distinct receptor configurations within it — get it with:
-> ```python
-> mdata.obs["airr:cc_aa_tcrdist_size"].max()
-> # equivalently:
-> mdata.obs.groupby("airr:cc_aa_tcrdist").size().max()
-> ```
-> The same applies to the nucleotide-identity network in step 3 via `airr:clone_id_size`.
-
-### 4d. Visualize
-
-```python
 _ = ir.pl.clonotype_network(mdata, color="<color_col>", base_size=20, label_fontsize=9, panel_size=(7, 7))
 ```
 
-Nodes now represent unique receptor configurations; connected subgraphs are clonotype clusters. Nodes within the same subgraph have CDR3 distances ≤ `cutoff`. Compared to the nucleotide-identity network (Step 3), you should now see several connected dots — each fully connected subnetwork is a clonotype cluster, while each individual dot still represents cells with identical receptor configurations.
+Now each connected subgraph (not each dot) is a clonotype cluster. Color by patient/sample to spot **public** clusters (shared across patients — interesting, suggests convergent recognition) vs. **private** ones (single patient).
 
-Coloring by a patient/sample column (e.g. `color="gex:patient"`) lets you distinguish **private** clonotype clusters (cells from a single patient only) from **public** ones (shared across patients) — public clusters are of particular interest since they suggest convergent recognition of the same antigen.
+> **Getting cluster/network sizes:** `ir.tl.clonotype_network` only computes plot layout — it has no queryable size/membership output. Use the `_size` columns instead:
+> ```python
+> mdata.obs["airr:cc_aa_tcrdist_size"].max()   # size of largest cluster, in cells
+> ```
+> Same applies to Step 2's network via `airr:clone_id_size`.
 
-### 4e. Extract CDR3 sequences from a specific cluster
+### Inspect the cells in one cluster
 
-To inspect the receptor configurations that make up one clonotype cluster, use `ir.get.airr_context` to temporarily attach AIRR columns to `mdata.obs`, then subset and group. Replace `"159"` with the cluster label of interest:
+Since scirpy v0.13, AIRR columns aren't in `mdata.obs` by default — use `ir.get.airr_context` to attach them temporarily. Replace `"159"` with the cluster label:
 
 ```python
 with ir.get.airr_context(mdata, "junction_aa", ["VJ_1", "VDJ_1", "VJ_2", "VDJ_2"]):
@@ -171,8 +90,7 @@ with ir.get.airr_context(mdata, "junction_aa", ["VJ_1", "VDJ_1", "VJ_2", "VDJ_2"
         .astype(str)  # works around a pandas dropna=False bug on some versions
         .groupby(
             ["VJ_1_junction_aa", "VDJ_1_junction_aa", "VJ_2_junction_aa", "VDJ_2_junction_aa", "airr:receptor_subtype"],
-            observed=True,
-            dropna=False,
+            observed=True, dropna=False,
         )
         .size()
         .reset_index(name="n_cells")
@@ -180,62 +98,34 @@ with ir.get.airr_context(mdata, "junction_aa", ["VJ_1", "VDJ_1", "VJ_2", "VDJ_2"
 cdr3_ct
 ```
 
-Each row is one distinct receptor configuration within the cluster, with its cell count — corresponding to the individual dots in the network plot.
-
-> Since scirpy v0.13, AIRR data is not included in `mdata.obs` by default. Use `ir.get.airr` for a per-cell AIRR data frame, or `ir.get.airr_context` (as above) to temporarily add columns to `obs`.
+Each row = one distinct receptor configuration in the cluster (one dot in the network), with its cell count.
 
 ---
 
-## Step 5 (Optional) — Constrain clusters by V-gene
+## Step 4 (Optional) — Constrain clusters by V-gene
 
-By default, cells can be grouped into the same clonotype cluster even if they use different V genes (different CDR1/CDR2 regions). Setting `same_v_gene=True` adds the constraint that both VJ and VDJ V genes must also match.
-
-**When to use:** When you care about shared CDR1/CDR2 in addition to CDR3 similarity, or when you want stricter evidence that cells recognize the same antigen via the same binding interface.
+By default, clusters can mix V genes (different CDR1/CDR2). Set `same_v_gene=True` to also require matching VJ and VDJ V genes — use when shared CDR1/CDR2 matters, or you want stronger evidence of a shared binding interface.
 
 ```python
 ir.tl.define_clonotype_clusters(
-    mdata,
-    sequence="aa",
-    metric="tcrdist",
-    receptor_arms="<receptor_arms>",
-    dual_ir="<dual_ir>",
-    same_v_gene=True,
-    key_added="cc_aa_tcrdist_same_v",
+    mdata, sequence="aa", metric="tcrdist",
+    receptor_arms="<receptor_arms>", dual_ir="<dual_ir>",
+    same_v_gene=True, key_added="cc_aa_tcrdist_same_v",
 )
 ```
 
-Result stored in `mdata.obs["airr:cc_aa_tcrdist_same_v"]`. You can compare it against the unconstrained clustering to find clusters that split when V-gene identity is enforced:
+Result: `mdata.obs["airr:cc_aa_tcrdist_same_v"]`. Find clusters that split when V-gene identity is enforced (e.g. `280` → `280`, `788`):
 
 ```python
-ct_different_v = (
-    mdata.obs
-    .groupby("airr:cc_aa_tcrdist")
-    .apply(lambda x: x["airr:cc_aa_tcrdist_same_v"].nunique() > 1)
+ct_different_v = mdata.obs.groupby("airr:cc_aa_tcrdist").apply(
+    lambda x: x["airr:cc_aa_tcrdist_same_v"].nunique() > 1
 )
 ct_different_v[ct_different_v].index.tolist()
-```
-
-For example, a cluster labeled `280` might split into `(280, 788)` once `same_v_gene=True` is enforced — the two resulting sub-clusters share CDR3 similarity but use different V genes. Inspect the actual V calls behind a split using `ir.get.airr_context`:
-
-```python
-with ir.get.airr_context(mdata, "v_call", ["VJ_1", "VDJ_1"]):
-    ct_different_v_df = (
-        mdata.obs.loc[
-            lambda x: x["airr:cc_aa_tcrdist"].isin(ct_different_v),
-            ["airr:cc_aa_tcrdist", "airr:cc_aa_tcrdist_same_v", "VJ_1_v_call", "VDJ_1_v_call"],
-        ]
-        .sort_values("airr:cc_aa_tcrdist")
-        .drop_duplicates()
-        .reset_index(drop=True)
-    )
-ct_different_v_df
 ```
 
 ---
 
 ## Post-clustering
-
-With clonotype IDs defined, the natural next steps are:
 
 - **Clonal expansion**: `ir.tl.clonal_expansion` → `ir.pl.clonal_expansion`
 - **Diversity**: `ir.pl.alpha_diversity`

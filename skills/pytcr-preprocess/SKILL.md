@@ -7,7 +7,7 @@ description: Preprocess and quality-control AIRR (TCR/BCR) data in a scirpy MuDa
 
 Run this after loading AIRR data (see `pytcr-data-loading` skill). These steps must be completed before any clonotype analysis.
 
-> If `mdata` also has a `gex` (transcriptomics) modality, this skill only covers the `airr` side. QC, normalization, and feature selection of the scRNA-seq data itself is a separate concern — use the `pytcr-sc-rnaseq-preprocessing` skill for that (independent of this one, can run before/after/in parallel).
+> If `mdata` also has a `gex` (transcriptomics) modality, this skill only covers the `airr` side. QC, normalization, and feature selection of the scRNA-seq data **must** be performed separately. Use the `pytcr-sc-rnaseq-preprocessing` skill for that (can run before/after/in parallel).
 
 ## Setup
 
@@ -67,13 +67,13 @@ _ = ir.pl.group_abundance(mdata, groupby="airr:receptor_subtype", target_col="<g
 _ = ir.pl.group_abundance(mdata, groupby="airr:chain_pairing", target_col="<group_col>")
 ```
 
-Use these plots to understand the composition before filtering.
+Use these plots to understand the composition before filtering. Alternatively, inspect `airr:receptor_subtype` and `airr:chain_pairing` directly.
 
 ## 3. Filter multichain cells
 
 Multichain cells have more than two receptor pairs and are almost certainly doublets (two cells co-captured in one droplet). **Always remove them.**
 
-Optionally inspect them on a UMAP first (requires GEX UMAP to be available):
+Optionally inspect them on a UMAP first (requires GEX UMAP to be available, see `pytcr-sc-rnaseq-preprocessing` skill):
 
 ```python
 mu.pl.embedding(mdata, basis="gex:umap", color="airr:chain_pairing", groups="multichain")

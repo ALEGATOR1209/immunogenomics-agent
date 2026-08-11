@@ -1,11 +1,11 @@
 ---
 name: pytcr-sc-rnaseq-preprocessing
-description: Quality-control, normalize, and select features for the gene expression (GEX) modality of a scirpy MuData object using scanpy — mito/ribo/hemoglobin QC metrics, cell/gene filtering, doublet detection, count normalization (median + log1p), and highly-variable-gene selection. Use after pytcr-data-loading whenever mdata has a gex modality, independently of (and typically before or alongside) pytcr-preprocess, which only handles the airr modality.
+description: Quality-control, normalize, and select features for the gene expression data (scRNA-seq). Mito/ribo/hemoglobin QC metrics, cell/gene filtering, doublet detection, count normalization (median + log1p), and highly-variable-gene selection. Use after pytcr-data-loading whenever mdata has a gex modality, independently of (and typically before or alongside) pytcr-preprocess. Should be run before pytcr-gex-integration.
 ---
 
 # scRNA-seq (GEX) Quality Control and Preprocessing
 
-Run this on the `gex` modality of a scirpy `MuData` object once it has been loaded (see `pytcr-data-loading`). This skill is the transcriptomics counterpart to `pytcr-preprocess`: it never touches receptor/chain data, only `mdata["gex"]`. The two skills are independent and can be run in either order, but GEX QC/normalization should be complete before any GEX embedding, clustering, or `pytcr-gex-integration` step.
+Run this on the `gex` modality of a scirpy `MuData` object or on a gene expression `AnnData` object once it has been loaded (see `pytcr-data-loading`). GEX QC/normalization should be complete before any GEX embedding, clustering, or `pytcr-gex-integration` step.
 
 ## Setup
 
@@ -104,12 +104,39 @@ mdata.mod["gex"] = gex
 mdata.update()
 ```
 
+## 7. (Optional) Dimensionality Reduction
+
+When preparing user-facing output, working with cell type annotation or clustering in downstream analysis, visualize the cellular composition. The typical approach is PCA -> KNN -> UMAP:
+
+```python
+# perform PCA dimensionality reduction
+sc.tl.pca(adata)
+
+# display a plot of how much each principal component contributes to the total variance
+sc.pl.pca_variance_ratio(adata, n_pcs=50, log=True)
+
+# calculate neighbourhood based on PCA
+sc.pp.neighbors(adata)
+
+# calculate UMAP representation
+sc.tl.umap(adata)
+
+# visualize UMAP
+sc.pl.umap(adata, color="sample")
+```
+
+Based on neigbourhood graph, you can calculate cell clusters. It can help you later with cell annotation or with comparing cells between patients and conditions:
+
+```python
+# calculate clusters using Leiden method
+sc.tl.leiden(adata, flavor="igraph")
+
+# display clusters on UMAP
+sc.pl.umap(adata, color=["leiden"])
+```
+
 ## Post-preprocessing
 
-The `gex` modality is now QC'd, normalized, and has HVGs flagged. Natural next steps on the GEX side (not covered by this repo's skills — standard scanpy):
-
-- **Dimensionality reduction**: `sc.tl.pca(gex)`
-- **Neighbors + embedding**: `sc.pp.neighbors(gex)` → `sc.tl.umap(gex)`
-- **Clustering**: `sc.tl.leiden(gex)`
+The `gex` modality is now QC'd, normalized, and has HVGs flagged.
 
 Once `mdata["gex"]` has a computed embedding/clustering, `pytcr-gex-integration` can combine it with clonotype identity (after `pytcr-preprocess` → `pytcr-clonotype-clustering` → `pytcr-clonotype-analysis` on the `airr` side).
