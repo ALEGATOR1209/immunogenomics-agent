@@ -6,6 +6,7 @@ test/results
 test/notebooks
 test/logs
 test/*/runs
+test/.run_all_state.json
 .DS_Store
 __pycache__
 .env

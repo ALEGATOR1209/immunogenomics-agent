@@ -159,6 +159,9 @@ ANTHROPIC_API_KEY=sk-ant-... ./test.py 01-data-loading --provider anthropic --mo
 # full benchmark: every task,
 # 5 times with skills and 5 without
 ./run_all.py
+
+# continue an interrupted benchmark from the last completed run
+./run_all.py --resume
 ```
 
 Each run builds a task image (the agent container + a mamba env with

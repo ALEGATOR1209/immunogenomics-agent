@@ -502,8 +502,10 @@ def run_once(task_name, task_dir, task_image, prompt, model, model_server, provi
             print(msg)
             with open(pretty_file, "a") as f:
                 f.write(msg + "\n")
-    shutil.rmtree(run_dir / "workspace")
-    (run_dir / "workspace").mkdir()
+    try:
+        shutil.rmtree(run_dir / "workspace")
+    except OSError as e:
+        print(f"WARNING: could not remove {run_dir / 'workspace'}: {e}")
 
     eval_file = run_dir / "eval_result.json"
     grade_result = run(
