@@ -5,24 +5,33 @@ Usage (from inside test/):
     ./test.py <task-dir-name> [--skills] [--timeout MINUTES] [--n COUNT] [--provider PROVIDER] [--model MODEL]
     MODEL='unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF:Q4_K_XL' ./test.py 01-data-loading --skills
     ./test.py 01-data-loading --model 'ggml-org/Qwen3.6-35B-A3B-GGUF:Q4_K_M'
-    ANTHROPIC_API_KEY=sk-ant-... ./test.py 01-data-loading --provider anthropic --model claude-opus-5
+    ./test.py 01-data-loading --provider anthropic --model claude-opus-5
+    ./test.py 01-data-loading --provider openai --model gpt-5.5
 
 --provider PROVIDER: which pi provider to run the agent through - "llama-cpp"
-    (default) for the host's local llama.cpp router, or "anthropic" for the
-    hosted Claude API (pi's built-in provider - no extra package needed,
-    unlike llama-cpp's pi-llama). anthropic requires ANTHROPIC_API_KEY to be
-    set on the host; it's passed into the container, never baked into the
-    image. Model resolution differs by provider - see --model below.
+    (default) for the host's local llama.cpp router, or one of the hosted
+    APIs, "anthropic" and "openai" (both pi built-ins - no extra package
+    needed, unlike llama-cpp's pi-llama). A hosted provider requires its API
+    key on the host (ANTHROPIC_API_KEY / OPENAI_API_KEY); only that one key is
+    passed into the container, never baked into the image. Model resolution
+    differs by provider - see --model below.
 
 --model MODEL: which model id to run.
     llama-cpp: the id as the router reports it. Precedence: this flag, then
     the MODEL env var, then - if exactly one model is loaded on the router -
     that one. The router only serves loaded models, so there's no useful
     hardcoded default; list them with ../docker-agent/llama-server.sh --list.
-    anthropic: a literal Claude model id (e.g. claude-opus-5, claude-sonnet-5,
-    claude-haiku-4-5). Precedence: this flag, then MODEL. No router to fall
-    back to - required outright since any hardcoded default would be wrong
-    most of the time.
+    anthropic/openai: a literal API model id (claude-opus-5, gpt-5.5, ...).
+    Precedence: this flag, then MODEL. No router to fall back to - required
+    outright since any hardcoded default would be wrong most of the time.
+    Nothing here validates the id against a list: pi forwards it to the
+    provider's API as given, so a model newer than pi's own bundled catalog
+    works without any change to pi or to this script.
+
+Environment variables (ANTHROPIC_API_KEY, OPENAI_API_KEY, MODEL, MEMORY_GB,
+LLAMA_BASE_URL, HOST_LLAMA_URL) are also read from the gitignored .env at the
+repo root, if one exists - anything already exported in the shell takes
+precedence over it.
 
 --skills: bind-mounts the project's skills/ (read-only) into the container
     at /root/.pi/agent/skills, pi's global auto-discovered skills location
@@ -33,9 +42,10 @@ The model server is llama.cpp's router running natively on the host; the
 container reaches it via host.docker.internal. Start it with
 ../docker-agent/llama-server.sh (which binds 0.0.0.0 - a router on
 127.0.0.1 is invisible to the container). Override the URL with
-LLAMA_BASE_URL. None of this applies to --provider anthropic, which talks
-directly to api.anthropic.com over the container's normal internet egress
-(the container isn't network-isolated - see docker-agent/README.md).
+LLAMA_BASE_URL. None of this applies to the hosted providers, which talk
+directly to api.anthropic.com / api.openai.com over the container's normal
+internet egress (the container isn't network-isolated - see
+docker-agent/README.md).
 
 --timeout MINUTES: kill the agent's container if it hasn't finished within
     this many minutes (default: 20). A background thread issues
@@ -78,8 +88,15 @@ import urllib.request
 from datetime import datetime
 from pathlib import Path
 
+import env_file
+
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent
+
+# Before anything reads os.environ below: the repo-root .env supplies
+# ANTHROPIC_API_KEY/MODEL/MEMORY_GB/LLAMA_BASE_URL etc. when they aren't
+# already exported. Anything actually exported in the shell still wins.
+LOADED_FROM_ENV_FILE = env_file.load_env()
 
 # Where the container reaches the host's llama.cpp router, and where this
 # script (running on the host) reaches the same server to resolve model ids.
@@ -91,13 +108,29 @@ HOST_LLAMA_URL = os.environ.get("HOST_LLAMA_URL", "http://127.0.0.1:8080")
 # separate built-in "llama.cpp" (dot) provider, which is NOT this one.
 LLAMA_CPP_PROVIDER = "llama-cpp"
 
-# pi's built-in Anthropic provider - already present in pi-coding-agent's
-# own dependencies, unlike llama-cpp which needs the separate pi-llama
-# package. Reads ANTHROPIC_API_KEY from the environment (same resolution
-# order as the Anthropic SDK).
+# pi's built-in hosted providers - already present in pi-coding-agent's own
+# dependencies, unlike llama-cpp which needs the separate pi-llama package.
+# Each maps to the one env var pi reads its credential from, which is also
+# the only thing this script forwards into the container for it.
 ANTHROPIC_PROVIDER = "anthropic"
+OPENAI_PROVIDER = "openai"
 
-PROVIDERS = (LLAMA_CPP_PROVIDER, ANTHROPIC_PROVIDER)
+HOSTED_PROVIDER_KEYS = {
+    ANTHROPIC_PROVIDER: "ANTHROPIC_API_KEY",
+    OPENAI_PROVIDER: "OPENAI_API_KEY",
+}
+
+# An example id per hosted provider, used only in the "you must pass --model"
+# error. Not a default and not a whitelist: pi forwards whatever id it's given
+# to the provider's API, including ones its own bundled model catalog predates
+# (claude-opus-5 ran fine under pi 0.83.0, whose catalog stops at
+# claude-opus-4-8), so newer models need no change here.
+HOSTED_PROVIDER_EXAMPLES = {
+    ANTHROPIC_PROVIDER: "claude-opus-5",
+    OPENAI_PROVIDER: "gpt-5.5",
+}
+
+PROVIDERS = (LLAMA_CPP_PROVIDER, *HOSTED_PROVIDER_KEYS)
 
 DOCKERFILE_TEMPLATE = """ARG BASE_IMAGE=pytcr-agent:latest
 FROM ${BASE_IMAGE}
@@ -192,10 +225,11 @@ def router_models():
 def get_model_server(provider):
     """What eval_result.json records as having served the model. The router
     reports no version of its own, so for llama-cpp this is the server kind
-    plus whether it was actually reachable at run time; anthropic talks
-    directly to the hosted API, so there's no local reachability to check."""
-    if provider == ANTHROPIC_PROVIDER:
-        return "anthropic"
+    plus whether it was actually reachable at run time; the hosted providers
+    talk straight to their own API, so there's no local reachability to check
+    and the provider id is the whole answer."""
+    if provider in HOSTED_PROVIDER_KEYS:
+        return provider
     return "llama.cpp" if router_models() is not None else "llama.cpp (unreachable)"
 
 
@@ -205,18 +239,18 @@ def resolve_model(explicit, provider):
 
     There is deliberately no hardcoded default: for llama-cpp the router
     serves only models that are currently loaded, so any fixed id would be
-    wrong most of the time; for anthropic there's no router to fall back to
-    at all. Failing loudly here beats a run that dies inside the container
-    with an opaque error."""
+    wrong most of the time; for the hosted providers there's no router to
+    fall back to at all. Failing loudly here beats a run that dies inside the
+    container with an opaque error."""
     if explicit:
         return explicit
     if os.environ.get("MODEL"):
         return os.environ["MODEL"]
 
-    if provider == ANTHROPIC_PROVIDER:
+    if provider in HOSTED_PROVIDER_KEYS:
         die(
-            "No --model/MODEL given for --provider anthropic.\n"
-            "  Pass a Claude model id, e.g. --model claude-opus-5"
+            f"No --model/MODEL given for --provider {provider}.\n"
+            f"  Pass a model id, e.g. --model {HOSTED_PROVIDER_EXAMPLES[provider]}"
         )
 
     models = router_models()
@@ -439,11 +473,13 @@ def run_once(task_name, task_dir, task_image, prompt, model, model_server, provi
         # arrangement the opencode setup had with ~/.claude/skills.
         skills_mount = ["-v", f"{REPO_ROOT / 'skills'}:/root/.pi/agent/skills:ro"]
 
-    # Only one of these is ever passed in: LLAMA_BASE_URL for the local
-    # router, ANTHROPIC_API_KEY for the hosted API - never both, so a
-    # llama-cpp run's container never sees a stray API key and vice versa.
-    if provider == ANTHROPIC_PROVIDER:
-        provider_env = ["-e", f"ANTHROPIC_API_KEY={os.environ['ANTHROPIC_API_KEY']}"]
+    # Exactly one of these is ever passed in: LLAMA_BASE_URL for the local
+    # router, or the one API key belonging to the hosted provider in use - so
+    # a llama-cpp run's container never sees a stray API key, and an openai
+    # run never sees the Anthropic key or vice versa.
+    if provider in HOSTED_PROVIDER_KEYS:
+        key_var = HOSTED_PROVIDER_KEYS[provider]
+        provider_env = ["-e", f"{key_var}={os.environ[key_var]}"]
     else:
         provider_env = ["-e", f"LLAMA_BASE_URL={CONTAINER_LLAMA_URL}"]
 
@@ -537,8 +573,12 @@ def run_once(task_name, task_dir, task_image, prompt, model, model_server, provi
 
 def main():
     args = parse_args()
-    if args.provider == ANTHROPIC_PROVIDER and not os.environ.get("ANTHROPIC_API_KEY"):
-        die("ANTHROPIC_API_KEY is not set - required for --provider anthropic.")
+    if LOADED_FROM_ENV_FILE:
+        log(f"Loaded from {env_file.ENV_FILE}: {', '.join(LOADED_FROM_ENV_FILE)}")
+    key_var = HOSTED_PROVIDER_KEYS.get(args.provider)
+    if key_var and not os.environ.get(key_var):
+        die(f"{key_var} is not set - required for --provider {args.provider}. "
+            f"Export it, or put it in {env_file.ENV_FILE}.")
     model = resolve_model(args.model, args.provider)
     model_server = get_model_server(args.provider)
     memory_gb = os.environ.get("MEMORY_GB", "8")

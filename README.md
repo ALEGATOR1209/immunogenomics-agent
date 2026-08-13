@@ -129,6 +129,11 @@ cd test
 
 # pick one explicitly (it must already be loaded)
 ./docker-agent/chat.sh <model-id>
+
+# a hosted model instead of the local router
+# (ANTHROPIC_API_KEY / OPENAI_API_KEY from the repo-root .env, or from the shell)
+./docker-agent/chat.sh --provider anthropic claude-opus-5
+./docker-agent/chat.sh --provider openai gpt-5.5
 ```
 
 The model runs natively on the host (keeping GPU acceleration); only the
@@ -153,8 +158,10 @@ cd test
 # select specific model (must be pre-loaded)
 ./test.py 01-data-loading --model 'ggml-org/Qwen3.6-35B-A3B-GGUF:Q4_K_M'
 
-# compare against Claude, via pi's built-in anthropic provider
-ANTHROPIC_API_KEY=sk-ant-... ./test.py 01-data-loading --provider anthropic --model claude-opus-5
+# compare against a hosted model, via pi's built-in anthropic/openai providers
+# (the API key comes from the .env at the repo root, or from the shell)
+./test.py 01-data-loading --provider anthropic --model claude-opus-5
+./test.py 01-data-loading --provider openai --model gpt-5.5
 
 # full benchmark: every task,
 # 5 times with skills and 5 without
@@ -162,6 +169,22 @@ ANTHROPIC_API_KEY=sk-ant-... ./test.py 01-data-loading --provider anthropic --mo
 
 # continue an interrupted benchmark from the last completed run
 ./run_all.py --resume
+
+# full benchmark against a hosted model instead of the local router
+./run_all.py --provider anthropic --model claude-opus-5
+./run_all.py --provider openai --model gpt-5.5
+```
+
+`test.py` and `run_all.py` read their environment variables — `ANTHROPIC_API_KEY`,
+`OPENAI_API_KEY`, `MODEL`, `MEMORY_GB`, `LLAMA_BASE_URL`, `HOST_LLAMA_URL` — from a `.env` at the
+repo root, so a key never has to be typed on the command line. The file is
+gitignored; anything exported in the shell takes precedence over it.
+
+```bash
+# .env at the repo root
+ANTHROPIC_API_KEY=sk-ant-...
+OPENAI_API_KEY=sk-...
+MODEL=claude-opus-5
 ```
 
 Each run builds a task image (the agent container + a mamba env with

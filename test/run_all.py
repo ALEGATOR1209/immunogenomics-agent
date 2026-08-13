@@ -15,21 +15,49 @@ an eval_result.json, so an interrupted sweep can be picked up where it stopped
 with --resume. A run that died without grading is not checkpointed and is
 retried on resume.
 
+--provider/--model are passed straight through to test.py (same meaning and
+same defaults there: llama-cpp against the host router unless told otherwise).
+Neither is part of the checkpoint's identity, so --resume picks up where the
+sweep stopped regardless of which model ran before - pass the same flags on
+resume as on the original run.
+
+ANTHROPIC_API_KEY, OPENAI_API_KEY, MODEL and the rest are read from the
+gitignored .env at the repo root when they aren't already exported in the
+shell (see env_file.py), so a hosted-model sweep needs no key on the command
+line.
+
 Usage (from inside test/):
     ./run_all.py
     ./run_all.py --resume
+    ./run_all.py --provider anthropic --model claude-opus-5
+    ./run_all.py --provider openai --model gpt-5.5
 """
 import argparse
 import json
+import os
 import subprocess
 import sys
 import time
 from pathlib import Path
 
+import env_file
+
+# The repo-root .env (ANTHROPIC_API_KEY, MODEL, ...) - loaded here as well as
+# in test.py because this script reads those variables itself (the key check
+# below, the startup summary) before spawning anything. The child test.py
+# processes inherit what's set here, and loading is idempotent either way.
+LOADED_FROM_ENV_FILE = env_file.load_env()
+
 SCRIPT_DIR = Path(__file__).resolve().parent
 N_ITERATIONS = 5
 TIMEOUT_MINUTES = 60
 STATE_FILE = SCRIPT_DIR / ".run_all_state.json"
+
+# Kept in step with test.py's PROVIDERS/HOSTED_PROVIDER_KEYS by hand -
+# duplicated rather than imported so this stays a standalone script that only
+# shells out to test.py.
+HOSTED_PROVIDER_KEYS = {"anthropic": "ANTHROPIC_API_KEY", "openai": "OPENAI_API_KEY"}
+PROVIDERS = ("llama-cpp", *HOSTED_PROVIDER_KEYS)
 
 
 def log(msg):
@@ -95,7 +123,7 @@ def existing_run_dirs(task_dir):
     return {p.name for p in runs_dir.iterdir() if p.is_dir()}
 
 
-def run_one(task_name, use_skills, iteration, total):
+def run_one(task_name, use_skills, iteration, total, provider, model):
     """Returns True if the run finished and produced an eval_result.json."""
     task_dir = SCRIPT_DIR / task_name
     before = existing_run_dirs(task_dir)
@@ -106,6 +134,10 @@ def run_one(task_name, use_skills, iteration, total):
     cmd = [sys.executable, str(SCRIPT_DIR / "test.py"), task_name, "--timeout", str(TIMEOUT_MINUTES), "--n", "1"]
     if use_skills:
         cmd.append("--skills")
+    if provider:
+        cmd += ["--provider", provider]
+    if model:
+        cmd += ["--model", model]
 
     start = time.time()
     result = subprocess.run(cmd, cwd=SCRIPT_DIR, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -134,12 +166,28 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--resume", action="store_true",
                         help=f"continue the sweep after the last run recorded in {STATE_FILE.name}")
+    parser.add_argument("--provider", choices=PROVIDERS, default=None,
+                        help="pi provider to run every task through (passed to test.py; default: test.py's)")
+    parser.add_argument("--model", default=None,
+                        help="model id to run every task with (passed to test.py; default: test.py's resolution)")
     args = parser.parse_args()
+
+    if LOADED_FROM_ENV_FILE:
+        log(f"Loaded from {env_file.ENV_FILE}: {', '.join(LOADED_FROM_ENV_FILE)}")
+
+    # test.py's own stdout/stderr is suppressed per run, so its die() message
+    # would never be seen - check here instead of letting every run fail mute.
+    key_var = HOSTED_PROVIDER_KEYS.get(args.provider)
+    if key_var and not os.environ.get(key_var):
+        log(f"ERROR: {key_var} is not set - required for --provider {args.provider}. "
+            f"Export it, or put it in {env_file.ENV_FILE}.")
+        sys.exit(1)
 
     tasks = discover_tasks()
     log(f"Found {len(tasks)} tasks: {', '.join(tasks)}")
     plan = build_plan(tasks)
     log(f"Total runs planned: {len(plan)} ({N_ITERATIONS} with skills + {N_ITERATIONS} without, per task)")
+    log(f"Provider: {args.provider or 'test.py default'} | Model: {args.model or os.environ.get('MODEL') or 'test.py default'}")
 
     start = resume_index(plan) if args.resume else 0
     if start:
@@ -150,7 +198,7 @@ def main():
 
     for index, (task_name, use_skills, iteration) in enumerate(plan[start:], start=start + 1):
         log(f"--- run {index}/{len(plan)} ---")
-        if run_one(task_name, use_skills, iteration, N_ITERATIONS):
+        if run_one(task_name, use_skills, iteration, N_ITERATIONS, args.provider, args.model):
             save_state((task_name, use_skills, iteration))
 
     log("All runs complete.")

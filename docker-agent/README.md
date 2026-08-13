@@ -58,25 +58,35 @@ docker exec pytcr-agent pi -p "your prompt" \
   --provider llama-cpp --model <model-id>
 ```
 
-### Chatting with Claude instead of a local model
+### Chatting with a hosted model instead of a local one
 
-`chat.sh` can also drive pi's *built-in* `anthropic` provider — no extra
-package needed (unlike `llama-cpp`, which comes from the separate
+`chat.sh` can also drive pi's *built-in* `anthropic` and `openai` providers —
+no extra package needed (unlike `llama-cpp`, which comes from the separate
 `pi-llama` install in this directory's `Dockerfile`):
 
 ```bash
-export ANTHROPIC_API_KEY=sk-ant-...
+export ANTHROPIC_API_KEY=sk-ant-...      # or put it in the repo-root .env
 ./docker-agent/chat.sh --provider anthropic claude-opus-5
+
+export OPENAI_API_KEY=sk-...
+./docker-agent/chat.sh --provider openai gpt-5.5
 ```
 
-The key is read from your current shell and passed into the already-running
-`pytcr-agent` container per invocation (`docker exec -e`) — it's never baked
+The key is read from your current shell — or, when it isn't set there, from
+the gitignored `.env` at the repo root (the same file the `test/` harness
+reads; `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `MODEL` and `LLAMA_PORT` are picked up from it,
+and anything already exported wins). Only the key belonging to the
+provider in use is passed into the already-running
+`pytcr-agent` container per invocation (`docker exec -e`) — never baked
 into the image, `docker-compose.yml`, or persisted in the container, and
 there's no need to restart the container or re-run `setup.sh` to use it.
 Unlike `llama-cpp`, there's no router to fall back to for model selection —
-`--provider anthropic` requires an explicit model id (e.g. `claude-opus-5`,
-`claude-sonnet-5`, `claude-haiku-4-5`). The container isn't network-isolated,
-so it reaches `api.anthropic.com` over normal egress with no other config.
+a hosted provider requires an explicit model id (e.g. `claude-opus-5`,
+`gpt-5.5`), given as the argument or as `MODEL`. pi forwards the id to the
+provider's API verbatim, so ids newer than pi's bundled catalog work as-is —
+a wrong one surfaces as a 4xx from the API, not as a local error. The
+container isn't network-isolated, so it reaches `api.anthropic.com` /
+`api.openai.com` over normal egress with no other config.
 
 ## `llama-server.sh` — the model server
 
