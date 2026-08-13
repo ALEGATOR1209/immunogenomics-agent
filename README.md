@@ -170,10 +170,19 @@ cd test
 # continue an interrupted benchmark from the last completed run
 ./run_all.py --resume
 
+# 4 containers at once (each capped at MEMORY_GB, default 8 GB)
+./run_all.py --parallel 4
+
 # full benchmark against a hosted model instead of the local router
 ./run_all.py --provider anthropic --model claude-opus-5
 ./run_all.py --provider openai --model gpt-5.5
 ```
+
+`--parallel` fetches each task's data and builds its image once up front, then
+runs N agents concurrently, each in its own container and its own run
+directory. It only speeds things up when the model server can serve N agents
+at once — a local llama.cpp router usually can't, so it's mainly for the
+hosted providers.
 
 `test.py` and `run_all.py` read their environment variables — `ANTHROPIC_API_KEY`,
 `OPENAI_API_KEY`, `MODEL`, `MEMORY_GB`, `LLAMA_BASE_URL`, `HOST_LLAMA_URL` — from a `.env` at the

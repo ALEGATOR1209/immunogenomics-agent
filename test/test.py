@@ -56,6 +56,20 @@ docker-agent/README.md).
 --n COUNT: repeat the run COUNT times (default: 1), each stored as its own
     run directory under <task-dir>/runs/.
 
+--run-id ID: name the run directory (and the container) ID instead of the
+    usual start timestamp. Timestamps are only unique per process - two
+    test.py processes starting the same task in the same second would land in
+    one directory and fight over it - so run_all.py --parallel assigns each
+    run an explicit id. Letters, digits, '.', '_' and '-' only; incompatible
+    with --n > 1, which would reuse the one id for every iteration.
+
+--prepare-only: fetch data/ and build the images for the task, then exit
+    without starting an agent. Needs no model and no API key. This is the
+    shared setup that several concurrent runs of one task would otherwise do
+    at the same time - a duplicated GEO download into the same data/ and
+    competing builds of the same image tag - so run_all.py --parallel does it
+    once, serially, before fanning out.
+
 Ctrl-C (or a TERM) stops the in-flight container the same way a timeout
 does - extracts/grades whatever task.ipynb/output.json exists, marks
 eval_result.json with interrupted: true, skips any remaining --n
@@ -78,6 +92,7 @@ starting a run.
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -187,7 +202,7 @@ class QuietArgumentParser(argparse.ArgumentParser):
 def parse_args():
     usage = (
         "Usage: test.py <task-dir-name> [--skills] [--timeout MINUTES] [--n COUNT] "
-        "[--provider {llama-cpp,anthropic}] [--model MODEL]  "
+        "[--provider {llama-cpp,anthropic,openai}] [--model MODEL] [--run-id ID] [--prepare-only]  "
         "(run from inside test/, e.g. ./test.py 01-data-loading --skills)"
     )
     parser = QuietArgumentParser(add_help=False, usage=argparse.SUPPRESS)
@@ -197,6 +212,8 @@ def parse_args():
     parser.add_argument("--n", type=int, default=1)
     parser.add_argument("--provider", type=str, choices=PROVIDERS, default=LLAMA_CPP_PROVIDER)
     parser.add_argument("--model", type=str, default=None)
+    parser.add_argument("--run-id", dest="run_id", type=str, default=None)
+    parser.add_argument("--prepare-only", action="store_true")
     try:
         args = parser.parse_args()
     except SystemExit:
@@ -207,6 +224,13 @@ def parse_args():
         die(f"--timeout must be a positive integer (minutes), got: {args.timeout}")
     if args.n <= 0:
         die(f"--n must be a positive integer, got: {args.n}")
+    if args.run_id is not None:
+        # The id becomes a directory name under runs/ and part of the
+        # container name, so keep it to characters that are safe in both.
+        if not re.fullmatch(r"[A-Za-z0-9._-]+", args.run_id):
+            die(f"--run-id may only contain letters, digits, '.', '_' and '-', got: {args.run_id}")
+        if args.n > 1:
+            die("--run-id can't be combined with --n > 1 - every iteration would reuse the same directory.")
     return args
 
 
@@ -431,11 +455,15 @@ def stream_docker_run(cmd, log_file, pretty_file, container_name):
         return proc.returncode, interrupted
 
 
-def run_once(task_name, task_dir, task_image, prompt, model, model_server, provider, memory_gb, use_skills, timeout_min, iter_num, n):
+def run_once(task_name, task_dir, task_image, prompt, model, model_server, provider, memory_gb, use_skills, timeout_min, iter_num, n, run_id=None):
     start_dt = datetime.now()
-    run_id = start_dt.strftime("%Y%m%d_%H%M%S")
-    if n > 1:
-        run_id = f"{run_id}_{iter_num}"
+    if run_id is None:
+        # A timestamp to the second is unique enough for runs started from
+        # this process, but not across concurrent test.py processes - which
+        # is why run_all.py's --parallel passes an explicit --run-id instead.
+        run_id = start_dt.strftime("%Y%m%d_%H%M%S")
+        if n > 1:
+            run_id = f"{run_id}_{iter_num}"
     run_dir = task_dir / "runs" / run_id
     (run_dir / "workspace").mkdir(parents=True, exist_ok=True)
     (run_dir / "prompt.txt").write_text(prompt)
@@ -575,12 +603,16 @@ def main():
     args = parse_args()
     if LOADED_FROM_ENV_FILE:
         log(f"Loaded from {env_file.ENV_FILE}: {', '.join(LOADED_FROM_ENV_FILE)}")
-    key_var = HOSTED_PROVIDER_KEYS.get(args.provider)
-    if key_var and not os.environ.get(key_var):
-        die(f"{key_var} is not set - required for --provider {args.provider}. "
-            f"Export it, or put it in {env_file.ENV_FILE}.")
-    model = resolve_model(args.model, args.provider)
-    model_server = get_model_server(args.provider)
+    # --prepare-only never starts an agent, so it needs no credential and no
+    # model: it exists so run_all.py --parallel can do the shared, racy setup
+    # (data fetch, image build) once and serially, before fanning out.
+    if not args.prepare_only:
+        key_var = HOSTED_PROVIDER_KEYS.get(args.provider)
+        if key_var and not os.environ.get(key_var):
+            die(f"{key_var} is not set - required for --provider {args.provider}. "
+                f"Export it, or put it in {env_file.ENV_FILE}.")
+        model = resolve_model(args.model, args.provider)
+        model_server = get_model_server(args.provider)
     memory_gb = os.environ.get("MEMORY_GB", "8")
 
     task_dir = SCRIPT_DIR / args.task_name
@@ -605,6 +637,10 @@ def main():
     log(f"Building task image: {task_image}")
     run(["docker", "build", "-f", str(task_dir / "Dockerfile"), "-t", task_image, str(SCRIPT_DIR)], check=True)
 
+    if args.prepare_only:
+        log(f"Prepared {args.task_name} (data + image {task_image}); not running the agent.")
+        sys.exit(0)
+
     prompt = render_prompt(task_json)
 
     statuses = []
@@ -613,7 +649,7 @@ def main():
             log(f"=== Run {i}/{args.n} ===")
         status, interrupted = run_once(
             args.task_name, task_dir, task_image, prompt, model, model_server, args.provider, memory_gb,
-            args.skills, args.timeout, i, args.n,
+            args.skills, args.timeout, i, args.n, args.run_id,
         )
         statuses.append(status)
         if interrupted:
