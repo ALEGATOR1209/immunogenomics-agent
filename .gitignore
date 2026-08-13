@@ -1,7 +1,7 @@
 .vscode
 .claude
 .agents
-data
+test/*/data
 test/results
 test/notebooks
 test/logs
