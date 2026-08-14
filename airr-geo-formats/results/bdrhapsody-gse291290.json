@@ -1,0 +1,41 @@
+{
+  "id": "bdrhapsody-gse291290",
+  "format": "BD Rhapsody",
+  "label": "GSE291290 — heart transplant PBMC multi-omics",
+  "status": "positive_medium_confidence",
+  "identification": {
+    "paper_title": "Proinflammatory and cytotoxic CD38+HLA-DR+ effector memory CD8+ T cells are peripherally expanded in human cardiac allograft vasculopathy",
+    "authors": "Yuko Tada, Sujit Silas Armstrong Suthahar, Payel Roy, Vasantika Suryawanshi, Runpei Wu, Erpei Wang, Felix Sebastian Nettersheim, Anusha Bellapu, Katarzyna Dobaczewska, Cheryl Kim, Florin Vaida, Gerald P. Morris, Klaus Ley, Paul J. Kim",
+    "year": "2024 (medRxiv preprint) / 2026 (peer-reviewed journal issue, published online October 2025)",
+    "journal": "American Journal of Transplantation, Vol. 26, Issue 2, pp. 276-290 (peer-reviewed); originally posted as a medRxiv preprint",
+    "doi": "10.1016/j.ajt.2025.10.015 (journal); 10.1101/2024.12.23.24319590 (medRxiv preprint)"
+  },
+  "data_location": {
+    "geo_accession": "GSE291290 (GSM8833027, GSM8833028, GSM8833029, GSM8833030, GSM8833031, GSM8833032 — 6 samples/libraries)",
+    "repository_confirmed_geo": true,
+    "alternate_repository": "N/A — dataset is confirmed deposited on GEO itself",
+    "supplementary_file_names": "GSE291290_Ab_raw.csv.gz, GSE291290_Genes_raw.csv.gz, GSE291290_Metadata.csv.gz, GSE291290_Vdj_combined.csv.gz — all four confirmed present via direct GEO FTP listing. All four are study-wide/combined files; no per-GSM supplementary files are attached to the individual GSM8833027–032 sample records."
+  },
+  "format_specifics": {
+    "expected_reader_function": "read_bd_rhapsody (scirpy) is the nominal target, but per scirpy's current source/docstring (scverse/scirpy, main branch) it only accepts *_perCellChain.csv, *_perCellChain_unfiltered.csv, *_VDJ_Dominant_Contigs.csv, or *_VDJ_Unfiltered_Contigs.csv, and explicitly states that '*_perCell' files are not supported. GSE291290_Vdj_combined.csv.gz's schema, confirmed by directly downloading and parsing the file, is exactly the *_VDJ_perCell.csv dominant-chain-per-cell schema — the one format class read_bd_rhapsody rejects. The actual load path is therefore the pytcr-data-loading skill's generic 'Converting from other formats' manual AirrCell-construction pattern (CDR3 + V/D/J genes + locus + count columns per cell), not a direct read_bd_rhapsody call.",
+    "native_vs_flattened_output": "flattened summary table — a study-wide concatenation of what would otherwise be 6 separate per-sample dominant-chain-per-cell (*_VDJ_perCell.csv-schema) tables into a single file, with Cell_Index prefixed by library id (L1_ through L6_) to disambiguate cells across samples.",
+    "file_structure_notes": "Directly downloaded and parsed GSE291290_Vdj_combined.csv.gz (2.85 MB compressed, 119,300 data rows, confirmed via direct `gunzip`/`wc -l`). Header/columns: Cell_Index, Total_VDJ_Read_Count, Total_VDJ_Molecule_Count, then four per-locus column blocks — BCR_Heavy, BCR_Light, TCR_Alpha_Gamma, TCR_Beta_Delta — each with {locus}_V_gene_Dominant (and D/J/C_gene_Dominant where applicable), {locus}_CDR3_Nucleotide_Dominant, {locus}_CDR3_Translation_Dominant, {locus}_Read_Count, {locus}_Molecule_Count, plus BCR_Paired_Chains and TCR_Paired_Chains (boolean) and Cell_Type_Experimental. This is one row per cell holding only the single dominant chain per locus type (not one row per chain/contig) — i.e. BD Rhapsody's standard per-cell VDJ summary schema, concatenated across all 6 libraries. Per-library Cell_Index prefix breakdown (directly counted): L1=22,958, L2=18,205, L3=19,342, L4=16,833, L5=21,281, L6=20,682 cells. GSE291290_Metadata.csv.gz shares the same Cell_Index key and supplies Library, SampleTag, SampleName (e.g. 'CAV1'), SampleType (e.g. 'CAV'), and clinical covariates — this is the join table needed to split the combined file back into its 6 constituent GSM8833027–032 samples. GSE291290_Genes_raw.csv.gz (WTA) and GSE291290_Ab_raw.csv.gz (AbSeq/CITE-seq protein) are the companion study-wide gene-expression/protein matrices, keyed on the same Cell_Index scheme.",
+    "pipeline_version": "Not stated in the GEO record and not confirmed from the paper's methods during this research; the exact BD Rhapsody Sequence Analysis Pipeline version used to generate Vdj_combined.csv.gz is unknown. [uncertain]"
+  },
+  "sample_context": {
+    "species": "Human",
+    "tissue_disease": "Peripheral blood mononuclear cells (PBMC); heart transplant recipients with vs. without cardiac allograft vasculopathy (CAV) / graft dysfunction — SampleType values include 'CAV', directly confirmed in Metadata.csv.gz alongside clinical covariates (LVEF, HLA mismatch, DSA history, etc.)",
+    "single_cell_platform": "BD Rhapsody (WTA + AbSeq/CITE-seq + VDJ-seq, per the GEO series summary: 'BD Rhapsody CITE-seq and VDJ-seq')",
+    "species_and_chain_coverage": "Paired TCR + BCR in the same combined table: BCR (Heavy/Light) and TCR (Alpha/Gamma, Beta/Delta) dominant chains are both captured per cell. BCR_Paired_Chains and TCR_Paired_Chains boolean columns flag, per cell, whether both chains of a receptor were recovered (e.g. row 3 in the sample data has both TRUE for TCR and BCR).",
+    "linked_gex_modality": true
+  },
+  "loadability": {
+    "loadability_confidence": "low",
+    "file_completeness_caveat": "GEO record states 'missing raw files are due to file loss' (submitter note) — indicating some other intended raw file(s) were never deposited. The four files that are present (Ab_raw, Genes_raw, Metadata, Vdj_combined) are all study-wide/combined rather than the per-GSM breakdown implied by there being 6 separate GSM accessions; no per-sample supplementary files are attached to any of GSM8833027–032 individually.",
+    "reformatting_needed": "(1) read_bd_rhapsody cannot be called directly on this file — confirmed against scirpy's current source/docstring that it does not accept *_perCell-schema files (only *_perCellChain.csv/*_perCellChain_unfiltered.csv/*_VDJ_Dominant_Contigs.csv/*_VDJ_Unfiltered_Contigs.csv are supported), and Vdj_combined.csv.gz's confirmed column layout is exactly the unsupported *_VDJ_perCell.csv schema. (2) Melt/reshape the four per-locus column blocks (BCR_Heavy, BCR_Light, TCR_Alpha_Gamma, TCR_Beta_Delta) into individual chain records (locus, v/d/j/c_call, junction, junction_aa, consensus_count) per cell, following the pytcr-data-loading skill's generic 'Converting from other formats' AirrCell.empty_chain_dict() pattern — this is a mechanical, well-scoped transform once the schema is known. (3) Split by sample using Metadata.csv.gz's Cell_Index -> Library/SampleName join (Cell_Index prefixes L1_ through L6_ map 1:1 to the 6 GSM accessions), or keep one combined AnnData/MuData with a sample obs column, since scirpy natively supports multi-sample objects. (4) Join Genes_raw.csv.gz and Ab_raw.csv.gz on the same Cell_Index to build the paired `gex` modality for a scirpy MuData object."
+  },
+  "provenance": {
+    "verification_method": "Direct verification: fetched the GEO series page and confirmed all 4 supplementary filenames plus the 'missing raw files are due to file loss' submitter note. Downloaded GSE291290_Vdj_combined.csv.gz and GSE291290_Metadata.csv.gz directly from the NCBI FTP suppl/ directory (not inferred from filenames) and parsed them with shell tools (header inspection, total row count, per-library Cell_Index prefix breakdown) to firm up the file-structure and loadability assessment beyond the prior 'likely' characterization. Cross-checked scirpy's read_bd_rhapsody support surface directly against its current docstring/implementation on the scverse/scirpy GitHub main branch (not just high-level documentation pages). Identified and matched the associated publication via the GEO record's linked PubMed IDs (41138970 journal version, 39763556 medRxiv preprint) and independently confirmed the link by matching the 'CAV' SampleType value found in Metadata.csv.gz against the paper's cardiac allograft vasculopathy (CAV) cohort design."
+  },
+  "uncertain": ["pipeline_version"]
+}

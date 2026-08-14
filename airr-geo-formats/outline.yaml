@@ -1,0 +1,122 @@
+topic: >
+  Single-cell TCR/BCR/AIRR-seq datasets on GEO, by loader format,
+  for testing the pytcr-data-loading skill (scirpy readers:
+  read_tracer, read_airr, read_bd_rhapsody). BraCeR and Dandelion
+  were dropped from scope: research found no valid native-format
+  GEO deposits for either (BraCeR's own paper used EGA
+  EGAD00001004199; both Dandelion anchor papers used EGA/ArrayExpress).
+  read_10x_vdj (CellRanger) was excluded from research entirely —
+  already covered by a working real-GEO example in the skill
+  (liao-2019-covid19, GSM4385993 + GSM4339772).
+
+items:
+  - id: tracer-gse270928
+    format: TraCeR
+    label: "GSE270928 — Automated HT Smart-seq3 CD4+ T cells (2024)"
+    geo_accession: GSE270928
+    status: positive_needs_reformatting
+    note: >
+      Deposited files (GSE270928_TraCeR_filtered_cell_data_HT_SS3.csv.gz,
+      GSE270928_TraCeR_filtered_recombinants_HT_SS3.txt.gz) are flattened
+      CSV/TXT summary exports, not the native per-cell
+      filtered_TCR_seqs/<cell>/*.pkl directory structure read_tracer()
+      expects. Likely needs remapping into AIRR-TSV and loading via
+      read_airr() instead.
+
+  - id: tracer-gse125077
+    format: TraCeR
+    label: "GSE125077 — murine SCC neoantigens (trap example)"
+    geo_accession: GSE125077
+    status: negative_trap
+    note: >
+      Methods state TraCeR v0.6.0 was used, but GEO only hosts
+      GSE125077_Single_cell_HTSeq_counts.tsv.gz (gene expression counts).
+      No TCR/TraCeR output was deposited at all. Useful as a documented
+      "tool used, output not deposited" failure mode.
+
+  - id: airr-gse158055
+    format: AIRR-TSV
+    label: "GSE158055 — Ren et al. COVID-19 Chinese cell atlas"
+    geo_accession: GSE158055
+    status: unconfirmed_needs_download
+    note: >
+      GSE158055_covid19_BCR_TCR.tar.gz confirmed present in the GEO file
+      listing, but contents weren't inspectable via search tools alone.
+      2020-era Cell Ranger predates the native airr_rearrangement.tsv
+      sidecar (added in Cell Ranger 6+), so this is likely
+      filtered_contig_annotations.csv / all_contig.fasta format rather
+      than true AIRR-TSV. Needs an actual download to confirm.
+
+  - id: airr-open-search
+    format: AIRR-TSV
+    label: "Open item: confirmed post-2021 10x 5' VDJ GEO dataset with native airr_rearrangement.tsv"
+    geo_accession: null
+    status: open_research_question
+    note: >
+      airr_rearrangement.tsv only became a default Cell Ranger sidecar
+      output at v6+ (~2021+). No specific GSE was positively confirmed
+      during initial research. Deep research should search GEO for
+      2022+ 10x 5' Immune Profiling series and verify the file is
+      literally named/structured as AIRR rearrangement TSV.
+
+  - id: bdrhapsody-gse197456
+    format: BD Rhapsody
+    label: "GSE197456 — Type 1 Diabetes TCR, BD Rhapsody VDJ CDR3 Assay (trap example)"
+    geo_accession: GSE197456
+    status: negative_trap
+    note: >
+      Title explicitly names the VDJ CDR3 assay, but the only deposited
+      files (confirmed via GEO FTP listing) are
+      GSM5917901-4_S#_DBEC_MolsPerCell.csv.gz — WTA molecule-count
+      matrices only. No VDJ/CDR3 file was actually deposited despite
+      the assay being named. Documented title-vs-content mismatch.
+
+  - id: bdrhapsody-gse291290
+    format: BD Rhapsody
+    label: "GSE291290 — heart transplant PBMC multi-omics"
+    geo_accession: GSE291290
+    status: positive_medium_confidence
+    note: >
+      GSE291290_Vdj_combined.csv.gz confirmed present, alongside
+      Ab_raw.csv.gz, Genes_raw.csv.gz, Metadata.csv.gz. Real VDJ output,
+      but a study-wide consolidated table rather than the pipeline's
+      native per-sample *_VDJ_perCell.csv structure read_bd_rhapsody()
+      expects — likely needs column remapping/splitting by sample.
+      GEO record itself notes "missing raw files are due to file loss."
+
+excluded_from_scope:
+  - format: BraCeR
+    reason: >
+      No GSE record found with native BraCeR output after extensive
+      search. The tool's own verification dataset is on EGA
+      (EGAD00001004199), not GEO. One superficially promising GEO hit
+      (GSE225574) contained only a raw UMI count matrix, no BCR
+      reconstruction output.
+  - format: Dandelion
+    reason: >
+      Both anchor papers confirmed off-GEO: Stephenson et al. 2021
+      (Nat Med, COMBAT cohort) is on EGA (EGAS00001005493) + Zenodo;
+      Suo et al. 2023 (Nat Biotechnol, the Dandelion tool paper) is on
+      ArrayExpress (E-MTAB-12524). No third-party GSE with native
+      Dandelion output found. Likely a structural null set for GEO.
+  - format: CellRanger (read_10x_vdj)
+    reason: >
+      Not researched — already has a working, verified real-GEO example
+      built into the skill (liao-2019-covid19: GSM4385993 TCR contigs +
+      GSM4339772 GEX).
+
+execution:
+  batch_size: 3
+  items_per_agent: 2
+  output_dir: ./results
+  agent_grouping: by_format
+  groups:
+    - agent: 1
+      format: TraCeR
+      items: [tracer-gse270928, tracer-gse125077]
+    - agent: 2
+      format: AIRR-TSV
+      items: [airr-gse158055, airr-open-search]
+    - agent: 3
+      format: BD Rhapsody
+      items: [bdrhapsody-gse197456, bdrhapsody-gse291290]

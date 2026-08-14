@@ -1,0 +1,41 @@
+{
+  "id": "bdrhapsody-gse197456",
+  "format": "BD Rhapsody",
+  "label": "GSE197456 — Type 1 Diabetes TCR, BD Rhapsody VDJ CDR3 Assay (trap example)",
+  "status": "negative_trap",
+  "identification": {
+    "paper_title": "Characterization of Peripheral Blood TCR in Patients with Type 1 Diabetes Mellitus by BD Rhapsody(TM) VDJ CDR3 Assay",
+    "authors": "Takuro Okamura, Masahide Hamaguchi, Hiroyuki Tominaga, Noriyuki Kitagawa, Yoshitaka Hashimoto, Saori Majima, Takafumi Senmaru, Hiroshi Okada, Emi Ushigome, Naoko Nakanishi, Shigeyuki Shichino, Michiaki Fukui",
+    "year": "2022",
+    "journal": "Cells (MDPI), Vol. 11, Issue 10, Art. 1623",
+    "doi": "10.3390/cells11101623"
+  },
+  "data_location": {
+    "geo_accession": "GSE197456 (GSM5917901, GSM5917902, GSM5917903, GSM5917904)",
+    "repository_confirmed_geo": true,
+    "alternate_repository": "N/A — dataset is confirmed deposited on GEO itself",
+    "supplementary_file_names": "Series level: GSE197456_BD_Rhapsody_T_Cell_Expression_Panel_Hs.fasta.gz (30 KB, targeted-panel probe reference), GSE197456_RAW.tar (2.7 MB, bundles the 4 GSM MolsPerCell files, verified via filelist.txt), filelist.txt. Per-GSM (individually re-checked for all 4 sub-records): GSM5917901_S1_DBEC_MolsPerCell.csv.gz (~563 KB), GSM5917902_S2_DBEC_MolsPerCell.csv.gz (~1.47 MB), GSM5917903_S3_DBEC_MolsPerCell.csv.gz (~258 KB), GSM5917904_S4_DBEC_MolsPerCell.csv.gz (~571 KB). No filename containing VDJ, CDR3, TCR, contig, or clonotype appears anywhere in the series-level listing, the RAW.tar contents, or any of the 4 individual GSM sub-record pages."
+  },
+  "format_specifics": {
+    "expected_reader_function": "read_bd_rhapsody (scirpy) is the nominal target implied by the assay name in the title, but this is moot: no VDJ output file exists anywhere in the record for it to read.",
+    "native_vs_flattened_output": "gene-expression-only (no VDJ deposited)",
+    "file_structure_notes": "Only WTA/targeted-panel molecule-count matrices are deposited: *_DBEC_MolsPerCell.csv.gz, one per sample/GSM, a cell x gene molecule-count table produced by the BD Rhapsody Targeted mRNA / T Cell Expression Panel workflow (DBEC = Distribution-Based Error Correction). None of BD Rhapsody's VDJ pipeline outputs (*_VDJ_perCell.csv, *_perCellChain.csv, *_VDJ_Dominant_Contigs.csv, *_VDJ_Unfiltered_Contigs.csv) are present at the series level or in any of the 4 individual GSM sub-records, despite the series title, the deposited FASTA panel-reference filename, and every GSM description explicitly naming the 'VDJ CDR3 Assay' / TCR profiling as part of the study design.",
+    "pipeline_version": "Not determinable — no VDJ pipeline output was deposited from which to identify a BD Rhapsody Sequence Analysis Pipeline version, and none is stated in the GEO record for the GEX-only files that are present. [uncertain]"
+  },
+  "sample_context": {
+    "species": "Human",
+    "tissue_disease": "Peripheral blood mononuclear cells (PBMC); Type 1 Diabetes Mellitus patients (n=4; mixed 1A autoimmune and SPIDDM subtypes, per individual GSM descriptions)",
+    "single_cell_platform": "BD Rhapsody (Express system, T Cell Expression Panel targeted probes; a 'VDJ CDR3 Assay' is named in the title/description but its output was not actually deposited)",
+    "species_and_chain_coverage": "Intended paired TCR alpha/beta coverage per the named VDJ CDR3 Assay and study description, but this cannot be confirmed in practice — no chain-level VDJ data of any kind was deposited.",
+    "linked_gex_modality": true
+  },
+  "loadability": {
+    "loadability_confidence": "low",
+    "file_completeness_caveat": "No VDJ/CDR3 file is deposited anywhere in the series. Re-confirmed directly against the GEO accession page and FTP listing beyond the original series-level check: (1) the series-level suppl/ directory (GSE197456_BD_Rhapsody_T_Cell_Expression_Panel_Hs.fasta.gz, GSE197456_RAW.tar, filelist.txt), (2) filelist.txt's enumeration of RAW.tar's contents (the same 4 MolsPerCell.csv.gz files, no VDJ file), and (3) all 4 individual GSM sub-records (GSM5917901–GSM5917904) checked one by one, each listing only its own *_DBEC_MolsPerCell.csv.gz as supplementary file. This is a title/description-vs-content mismatch — the paper and GEO series title explicitly name the 'BD Rhapsody VDJ CDR3 Assay' and the sample descriptions state 'TCR analysis to characterize peripheral blood TCR profiles,' yet no VDJ output was ever uploaded. GEO gives no submitter note explaining the omission (unlike GSE291290's explicit 'file loss' note).",
+    "reformatting_needed": "Not applicable for VDJ/AIRR loading — there is no VDJ file to reformat or remap. If only the gene-expression side is wanted, the *_DBEC_MolsPerCell.csv.gz per-sample cell x gene count tables could be loaded as a plain pandas table into an AnnData object (transposing to the standard cells-as-obs/genes-as-var orientation), but this produces no `airr` modality and cannot feed read_bd_rhapsody or any other scirpy IR reader."
+  },
+  "provenance": {
+    "verification_method": "Direct re-verification performed for this task, going beyond the original series-level-only check: fetched the GEO series page (acc.cgi?acc=GSE197456), the raw NCBI FTP suppl/ directory listing and its filelist.txt (enumerating RAW.tar's contents), and all four individual GSM sub-record pages (GSM5917901, GSM5917902, GSM5917903, GSM5917904) one by one — each confirmed to list only its own *_DBEC_MolsPerCell.csv.gz. Cross-checked against the associated publication (Okamura et al., 2022, Cells, doi 10.3390/cells11101623) located via web search / PubMed / PMC (PMC9139223), which confirms the study design (BD Rhapsody VDJ CDR3 Assay, n=4 T1DM patients) without independently confirming any additional deposited VDJ file. The negative_trap characterization is confirmed, not just inferred from the series-level listing."
+  },
+  "uncertain": ["pipeline_version"]
+}

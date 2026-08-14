@@ -1,0 +1,43 @@
+{
+  "id": "tracer-gse270928",
+  "format": "TraCeR",
+  "label": "GSE270928 — Automated HT Smart-seq3 CD4+ T cells (2024)",
+  "identification": {
+    "paper_title": "Single-cell sequencing of full-length transcripts and T-cell receptors with automated high-throughput Smart-seq3",
+    "authors": "Hsiu-Chun Chuang, Ruidong Li, et al. (16 authors total, incl. Kai-Hui Sun, Li Li; Gilead Sciences, Inc.)",
+    "year": 2024,
+    "journal": "BMC Genomics",
+    "doi": "10.1186/s12864-024-11036-0"
+  },
+  "data_location": {
+    "geo_accession": "GSE270928 (6,415 GSM sample accessions, GSM8358885–GSM8365304; SRA BioProject PRJNA1129044). Sibling series GSE270917 holds the paired 10X-platform comparison data, not part of this item.",
+    "repository_confirmed_geo": true,
+    "alternate_repository": "N/A — confirmed hosted on GEO directly",
+    "supplementary_file_names": "GSE270928_Seurat_Object_HT_SS3.rds.gz (299.0 Mb, R Seurat object — gene expression); GSE270928_TraCeR_filtered_cell_data_HT_SS3.csv.gz (156.9 Kb, 6,311 data rows); GSE270928_TraCeR_filtered_recombinants_HT_SS3.txt.gz (453.7 Kb, 22,165 data rows). Verified directly via the GEO series text record (form=text) and by downloading and decompressing both TraCeR files from the GEO FTP site."
+  },
+  "format_specifics": {
+    "expected_reader_function": "read_tracer (per filenames/branding); realistic path is read_airr after remapping to AIRR-TSV, since the deposited files are TraCeR's flattened summarise-step output rather than the per-cell pickle directory read_tracer() parses",
+    "native_vs_flattened_output": "flattened summary table",
+    "file_structure_notes": "Confirmed by direct inspection of decompressed file contents. GSE270928_TraCeR_filtered_cell_data_HT_SS3.csv.gz is a CSV with columns cell_name, A_unproductive, A_productive, B_unproductive, B_productive, clonal_group, group_size (one row per cell, 6,311 cells) — this matches TraCeR's own 'summarise' step 'cell_data.csv' output. GSE270928_TraCeR_filtered_recombinants_HT_SS3.txt.gz is a TSV with columns cell_name, locus, recombinant_id, productive, reconstructed_length, CDR3aa, CDR3nt (22,165 rows, one row per reconstructed recombinant; loci observed: A, B) — matches TraCeR's 'recombinants.txt' summarise output. Both are per-run aggregate summary tables, not the native filtered_TCR_seqs/<cell_name>/*.pkl per-cell directory structure that scirpy's read_tracer() expects to walk. recombinant_id embeds V/J gene calls and the junction nucleotide substring (e.g. 'TRAV6_CTAGATAATTCAGG_TRAJ6'), and CDR3aa/CDR3nt/productive are given directly per recombinant, so v_call, j_call, locus (A/B -> TRA/TRB), junction, junction_aa, productive, and cell_id could all be programmatically derived to build an AIRR rearrangement TSV for read_airr(). Full V(D)J contig sequence/alignment fields are NOT present in either flattened file (only the CDR3 nt substring), so a remapped AIRR-TSV would carry only the minimal/junction-level fields, not the full sequence/sequence_alignment fields.",
+    "pipeline_version": "Not applicable — TraCeR-based (not Cell Ranger/10x airr_rearrangement.tsv). Confirmed via the paper's full text (PMC11583680): TraCeR v0.6.0 (run as a Docker image), using its 'assemble' module per cell followed by its 'summarise' module to produce the deposited cell_data/recombinants files; reference genome for the assemble step is not explicitly stated in the Methods."
+  },
+  "sample_context": {
+    "species": "Homo sapiens",
+    "tissue_disease": "Peripheral blood mononuclear cell (PBMC)-derived, FACS-sorted CD4+ T cells from 2 healthy donors; DMSO vehicle control vs. PMA/Ionomycin stimulation (3 h), no disease state",
+    "single_cell_platform": "HT Smart-seq3 (automated, robotic high-throughput Smart-seq3; full-length plate-based scRNA-seq, not droplet-based)",
+    "species_and_chain_coverage": "TCR-only (no BCR); paired alpha/beta (TRA and TRB) chains recovered per cell where reconstructable, with unproductive and productive rearrangements both reported for each chain",
+    "linked_gex_modality": "Yes — matched full-length gene expression from the same cells is deposited in the same GSE as GSE270928_Seurat_Object_HT_SS3.rds.gz (Seurat object), so a scirpy MuData with both gex and airr modalities is in principle buildable, though the GEX side would need converting out of the Seurat/RDS format for a Python/scirpy workflow."
+  },
+  "loadability": {
+    "loadability_confidence": "Low for read_tracer() directly on the deposited files (wrong structure — flattened tables, not the per-cell pickle directory). Medium-to-high for read_airr() after a remapping script, since cell_name, locus, parseable V/J gene calls, productive flag, and CDR3aa/CDR3nt are all present at recombinant-level granularity in GSE270928_TraCeR_filtered_recombinants_HT_SS3.txt.gz.",
+    "file_completeness_caveat": "Files are TraCeR's own aggregate 'summarise' output (cell_data.csv + recombinants.txt), not its native per-cell filtered_TCR_seqs/<cell>/*.pkl output that read_tracer() expects; no full reconstructed V(D)J contig sequences are included (only CDR3 nt/aa), so any AIRR-TSV built from these files will lack sequence/sequence_alignment-level fields.",
+    "reformatting_needed": "Parse recombinant_id in the recombinants file to split out v_call and j_call gene segments (delimited by underscores around the junction nt substring); map locus values A/B to TRA/TRB; join productive, CDR3aa (junction_aa), CDR3nt (junction), and cell_name (cell_id) into one row per rearrangement; assemble into a minimal AIRR rearrangement TSV (cell_id, locus, v_call, j_call, junction, junction_aa, productive at minimum) that read_airr() can consume. The cell_data.csv clonal_group/group_size columns could optionally be carried through as auxiliary per-cell clonotype metadata."
+  },
+  "provenance": {
+    "verification_method": "GEO supplementary-file listing fetched directly from the NCBI GEO series text record (acc.cgi form=text) and cross-checked against the rendered GEO web page; both TraCeR supplementary files were additionally downloaded directly from the GEO FTP site and decompressed to inspect actual column headers and row counts (not inferred from the paper text alone). Publication metadata (title/authors/journal/DOI/PMID) and the TraCeR version/module usage were confirmed from the open-access full text on PMC (PMC11583680)."
+  },
+  "uncertain": [
+    "authors",
+    "pipeline_version"
+  ]
+}
