@@ -3,20 +3,48 @@ import json
 import sys
 
 
-def within_tolerance(actual, expected, tolerance):
+def _normalize_item(item):
+    return item.strip().lower() if isinstance(item, str) else item
+
+
+def list_overlap_score(actual, expected):
+    """Jaccard-style partial credit: |correct| / (|ground_truth| + |incorrect guesses|)."""
+    if isinstance(actual, str):
+        actual = [actual]
+    if not isinstance(actual, list):
+        return 0.0
+
+    expected_set = {_normalize_item(x) for x in expected}
+    actual_set = {_normalize_item(x) for x in actual}
+    n_correct = len(expected_set & actual_set)
+    n_incorrect = len(actual_set - expected_set)
+
+    denominator = len(expected_set) + n_incorrect
+    return (n_correct / denominator) if denominator else 0.0
+
+
+def field_score(actual, expected, tolerance):
+    """Returns (score in [0, 1], correct: bool) for one field."""
+    tolerance_type = tolerance.get("type") if tolerance else None
+
+    if tolerance_type == "list_overlap":
+        score = list_overlap_score(actual, expected)
+        return score, score == 1.0
+
     if tolerance is None:
         if isinstance(actual, str) and isinstance(expected, str):
-            return actual.lower() == expected.lower()
-        return actual == expected
+            correct = actual.lower() == expected.lower()
+        else:
+            correct = actual == expected
+        return (1.0 if correct else 0.0), correct
 
-    tolerance_type = tolerance.get("type")
     value = tolerance.get("value", 0)
-
     if tolerance_type == "absolute":
         try:
-            return abs(actual - expected) <= value
+            correct = abs(actual - expected) <= value
         except TypeError:
-            return False
+            return 0.0, False
+        return (1.0 if correct else 0.0), correct
 
     raise ValueError(f"Unsupported tolerance type: {tolerance_type!r}")
 
@@ -38,12 +66,12 @@ def grade(task, answer):
 
         actual_value = answer[key]
         try:
-            correct = within_tolerance(actual_value, expected_value, tolerances.get(key))
-            fields[key] = {"expected": expected_value, "actual": actual_value, "correct": correct}
+            score, correct = field_score(actual_value, expected_value, tolerances.get(key))
+            fields[key] = {"expected": expected_value, "actual": actual_value, "correct": correct, "score": score}
         except ValueError as e:
-            fields[key] = {"expected": expected_value, "actual": actual_value, "correct": False, "reason": str(e)}
+            fields[key] = {"expected": expected_value, "actual": actual_value, "correct": False, "score": 0.0, "reason": str(e)}
 
-    points = sum(1 for f in fields.values() if f["correct"])
+    points = sum(f["score"] for f in fields.values())
     total = len(ground_truth)
 
     return {

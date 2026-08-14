@@ -107,24 +107,47 @@ the required keys and value *types* but never the answers). Rules of thumb:
 - Key *names* are visible to the agent verbatim - don't leak the answer
   into a key name (e.g. don't do `"answer_is_LT5": false`).
 
-`grader.config.tolerances` is optional, keyed by the same field names.
-Only `{"type": "absolute", "value": N}` is implemented today
-(`abs(actual - expected) <= value`, checked by `test/grade.py`):
+`grader.config.tolerances` is optional, keyed by the same field names. Two
+types are implemented in `test/grade.py`:
 
-- A field with no entry in `tolerances` is compared with `==` (falling back
-  to case-insensitive string comparison when both sides are strings) - this
-  is the right choice for categorical/string answers (gene names, sample
-  ids). Don't add a numeric tolerance to a string field: `grade.py` will
-  catch the resulting `TypeError`/`ValueError` and just mark that field
-  wrong, every time, rather than erroring the whole run - a silent
-  always-fails footgun, not a crash that would tell you something's off.
-- A numeric field with tolerance `{"type": "absolute", "value": 0}` still
-  requires an exact match - use `0` when you want exactness enforced but
-  still want it to go through the numeric (not string) comparison path.
-- Pick tolerance values based on how much the exact number is expected to
-  vary with reasonable-but-different analysis choices (filtering
-  thresholds, clustering parameters) - see the existing tasks for the range
-  used in practice (`02-clonotype-analysis` through `07-clonal-expansion`).
+- `{"type": "absolute", "value": N}` - `abs(actual - expected) <= value`,
+  for numeric fields.
+- `{"type": "list_overlap"}` - for a `ground_truth` field whose value is a
+  *list* (e.g. "the two most abundant X, order doesn't matter"). Both sides
+  are compared as sets (case-insensitive, deduplicated); a bare string
+  answer is coerced to a one-item list so a model that ignores the list
+  shape can still get partial credit. Score is Jaccard overlap: `n_correct /
+  (n_ground_truth + n_incorrect_guessed)` - 1.0 only when the sets match
+  exactly, 0 when there's no overlap, and a fraction in between for partial
+  matches. Guessing extra wrong items on top of a correct one costs points
+  (grows the denominator), so it doesn't pay to pad the list. Use this
+  instead of `"absolute"` whenever the "correct" answer is inherently a
+  near-tie between two categories in the underlying data (see
+  `07-epitope-databases`'s `top_antigen_species_tumor`, changed from a
+  single-string second-most-abundant field to a 2-item list after runs
+  showed the single-answer version flipped between two categories separated
+  by a handful of cells - not a sign of model error, just an unstable
+  ranking).
+
+Fields with no entry in `tolerances` are compared with `==` (falling back
+to case-insensitive string comparison when both sides are strings) - this
+is the right choice for categorical/string answers (gene names, sample
+ids). Don't add a numeric tolerance to a string field: `grade.py` will
+catch the resulting `TypeError`/`ValueError` and just mark that field
+wrong, every time, rather than erroring the whole run - a silent
+always-fails footgun, not a crash that would tell you something's off. A
+numeric field with tolerance `{"type": "absolute", "value": 0}` still
+requires an exact match - use `0` when you want exactness enforced but
+still want it to go through the numeric (not string) comparison path.
+Pick tolerance values based on how much the exact number is expected to
+vary with reasonable-but-different analysis choices (filtering
+thresholds, clustering parameters) - see the existing tasks for the range
+used in practice (`02-clonotype-analysis` through `07-clonal-expansion`).
+
+Each field contributes at most 1 point regardless of tolerance type -
+`grade.py`'s per-field `"score"` (0 to 1) is what's summed into the
+top-level `points`/`score`, while `"correct"` stays a bool (`score == 1.0`)
+for `passed`/structure-comparison purposes.
 
 `grader.type` (currently always `"numeric_tolerance"` in existing tasks) is
 **not read by any script** - `grade.py` only ever looks at `grader.config`.
