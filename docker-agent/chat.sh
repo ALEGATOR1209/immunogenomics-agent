@@ -119,4 +119,4 @@ fi
 # `anthropic` provider is pi's own built-in id.
 echo ">> provider: $PROVIDER"
 echo ">> model: $MODEL"
-exec docker exec "${EXEC_ENV[@]}" -it pytcr-agent pi --provider "$PROVIDER" --model "$MODEL"
+exec docker exec "${EXEC_ENV[@]+"${EXEC_ENV[@]}"}" -it pytcr-agent pi --provider "$PROVIDER" --model "$MODEL"

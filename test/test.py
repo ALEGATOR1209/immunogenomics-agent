@@ -316,7 +316,8 @@ def ensure_task_data(task_dir, task_config):
     source and data/ doesn't exist yet. Runs before the Docker build so a
     fresh clone (data/ gitignored) can go straight to `./test.py <task>` for
     tasks that declare a source, without a separate manual step first."""
-    if (task_dir / "data").is_dir():
+    data_dir = task_dir / "data"
+    if data_dir.is_dir() and any(data_dir.iterdir()):
         return
     if not task_config.get("data"):
         die(f"Missing data/ in {task_dir} (and task.json has no \"data\" field to fetch it automatically).")
