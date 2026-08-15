@@ -61,7 +61,7 @@ def grade(task, answer):
     fields = {}
     for key, expected_value in ground_truth.items():
         if key not in answer:
-            fields[key] = {"expected": expected_value, "actual": None, "correct": False, "reason": "missing"}
+            fields[key] = {"expected": expected_value, "actual": None, "correct": False, "score": 0.0, "reason": "missing"}
             continue
 
         actual_value = answer[key]
