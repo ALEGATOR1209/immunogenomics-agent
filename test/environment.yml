@@ -8,8 +8,13 @@ dependencies:
   - jupyter
   - muon
   - numpy
+  - pip
   - python=3.12
   - scanpy
   - scirpy>=0.24
   - pip:
+    - ImageIO==2.37.4
+    - lazy-loader==0.5
+    - scikit-image==0.26.0
     - setuptools==81.0.0
+    - tifffile==2026.8.16
