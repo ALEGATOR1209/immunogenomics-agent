@@ -311,13 +311,36 @@ def ensure_base_image():
         run(["docker", "build", "-t", "pytcr-agent:latest", str(REPO_ROOT / "docker-agent")], check=True)
 
 
+def declared_data_targets(task_config):
+    """The data/ subfolders task.json says should exist, as a set of names.
+
+    fetch_data.py puts each entry in data/<path> when "path" is given and
+    data/<uri> otherwise, so those are exactly the folders to look for.
+    """
+    entries = task_config.get("data") or []
+    if isinstance(entries, dict):
+        entries = [entries]
+    return {e.get("path") or e.get("uri") for e in entries if e.get("path") or e.get("uri")}
+
+
 def ensure_task_data(task_dir, task_config):
     """Downloads data/ via fetch_data.py if task.json declares a "data"
-    source and data/ doesn't exist yet. Runs before the Docker build so a
-    fresh clone (data/ gitignored) can go straight to `./test.py <task>` for
-    tasks that declare a source, without a separate manual step first."""
+    source and the declared folders aren't there yet. Runs before the Docker
+    build so a fresh clone (data/ gitignored) can go straight to
+    `./test.py <task>` for tasks that declare a source, without a separate
+    manual step first.
+
+    Checks the *declared* folders rather than "is data/ non-empty": task 08
+    ships data/metadata.csv in git, which made data/ look populated, so the
+    fetch was skipped and the agent spent its whole run exploring a directory
+    holding one 275-byte CSV and none of the 24 GEO samples.
+    """
     data_dir = task_dir / "data"
-    if data_dir.is_dir() and any(data_dir.iterdir()):
+    wanted = declared_data_targets(task_config)
+    if wanted:
+        if data_dir.is_dir() and all((data_dir / name).exists() for name in wanted):
+            return
+    elif data_dir.is_dir() and any(data_dir.iterdir()):
         return
     if not task_config.get("data"):
         die(f"Missing data/ in {task_dir} (and task.json has no \"data\" field to fetch it automatically).")
