@@ -1,43 +1,148 @@
 {
   "data": [
-    { "type": "GEO", "uri": "GSM5340842", "path": "09-0" },
-    { "type": "GEO", "uri": "GSM5340843", "path": "09-7" },
-    { "type": "GEO", "uri": "GSM5340854", "path": "09-0" },
-    { "type": "GEO", "uri": "GSM5340855", "path": "09-7" },
-    { "type": "GEO", "uri": "GSM5340844", "path": "15-0" },
-    { "type": "GEO", "uri": "GSM5340845", "path": "15-7" },
-    { "type": "GEO", "uri": "GSM5340856", "path": "15-0" },
-    { "type": "GEO", "uri": "GSM5340857", "path": "15-7" },
-    { "type": "GEO", "uri": "GSM5340834", "path": "48-0" },
-    { "type": "GEO", "uri": "GSM5340835", "path": "48-7" },
-    { "type": "GEO", "uri": "GSM5340846", "path": "48-0" },
-    { "type": "GEO", "uri": "GSM5340847", "path": "48-7" },
-    { "type": "GEO", "uri": "GSM5340836", "path": "67-0" },
-    { "type": "GEO", "uri": "GSM5340837", "path": "67-7" },
-    { "type": "GEO", "uri": "GSM5340848", "path": "67-0" },
-    { "type": "GEO", "uri": "GSM5340849", "path": "67-7" },
-    { "type": "GEO", "uri": "GSM5340838", "path": "93-0" },
-    { "type": "GEO", "uri": "GSM5340839", "path": "93-7" },
-    { "type": "GEO", "uri": "GSM5340850", "path": "93-0" },
-    { "type": "GEO", "uri": "GSM5340851", "path": "93-7" },
-    { "type": "GEO", "uri": "GSM5340840", "path": "94-0" },
-    { "type": "GEO", "uri": "GSM5340841", "path": "94-7" },
-    { "type": "GEO", "uri": "GSM5340852", "path": "94-0" },
-    { "type": "GEO", "uri": "GSM5340853", "path": "94-7" }
+    {
+      "type": "GEO",
+      "uri": "GSM5340842",
+      "path": "09-0"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM5340843",
+      "path": "09-7"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM5340854",
+      "path": "09-0"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM5340855",
+      "path": "09-7"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM5340844",
+      "path": "15-0"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM5340845",
+      "path": "15-7"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM5340856",
+      "path": "15-0"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM5340857",
+      "path": "15-7"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM5340834",
+      "path": "48-0"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM5340835",
+      "path": "48-7"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM5340846",
+      "path": "48-0"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM5340847",
+      "path": "48-7"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM5340836",
+      "path": "67-0"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM5340837",
+      "path": "67-7"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM5340848",
+      "path": "67-0"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM5340849",
+      "path": "67-7"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM5340838",
+      "path": "93-0"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM5340839",
+      "path": "93-7"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM5340850",
+      "path": "93-0"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM5340851",
+      "path": "93-7"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM5340840",
+      "path": "94-0"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM5340841",
+      "path": "94-7"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM5340852",
+      "path": "94-0"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM5340853",
+      "path": "94-7"
+    }
   ],
   "grader": {
     "config": {
       "ground_truth": {
         "n_cells_all": 104572,
         "outstanding_patient": 67,
-        "largest_clonotypes": [67, 93],
+        "largest_clonotypes": [
+          67,
+          93
+        ],
         "vdj1_junction_aa": "CARGGSRRLRSGSFPPYYFDYW",
         "larger_clonal_expansion": "post-vaccination",
         "young_clonal_expansion_rate": 1.8465617862667874
       },
       "tolerances": {
-        "n_cells_all": 0,
-        "young_clonal_expansion_rate": 0.4
+        "n_cells_all": {
+          "type": "absolute",
+          "value": 0
+        },
+        "young_clonal_expansion_rate": {
+          "type": "absolute",
+          "value": 0.4
+        }
       }
     },
     "type": "numeric_tolerance"
