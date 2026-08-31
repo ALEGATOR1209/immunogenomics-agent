@@ -1,0 +1,144 @@
+{
+  "data": [
+    {
+      "type": "GEO",
+      "uri": "GSM5340842",
+      "path": "09-0"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM5340843",
+      "path": "09-7"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM5340854",
+      "path": "09-0"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM5340855",
+      "path": "09-7"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM5340844",
+      "path": "15-0"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM5340845",
+      "path": "15-7"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM5340856",
+      "path": "15-0"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM5340857",
+      "path": "15-7"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM5340834",
+      "path": "48-0"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM5340835",
+      "path": "48-7"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM5340846",
+      "path": "48-0"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM5340847",
+      "path": "48-7"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM5340836",
+      "path": "67-0"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM5340837",
+      "path": "67-7"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM5340848",
+      "path": "67-0"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM5340849",
+      "path": "67-7"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM5340838",
+      "path": "93-0"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM5340839",
+      "path": "93-7"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM5340850",
+      "path": "93-0"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM5340851",
+      "path": "93-7"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM5340840",
+      "path": "94-0"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM5340841",
+      "path": "94-7"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM5340852",
+      "path": "94-0"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM5340853",
+      "path": "94-7"
+    }
+  ],
+  "grader": {
+    "config": {
+      "ground_truth": {
+        "n_cells_rna_seq": 123693,
+        "n_cells_bcr_seq": 121533,
+        "n_cells_bcr_young": 71655,
+        "n_cells_rna_old_post_vac": 24175
+      },
+      "tolerances": {
+      }
+    },
+    "type": "numeric_tolerance"
+  },
+  "id": "bcr-influenza-data-loading",
+  "metadata": {
+    "eval_type": "scientific",
+    "kit": "bcr-influenza",
+    "task": "data-loading"
+  },
+  "task": "There is RNA-seq 10X Cell Ranger data and BCR-seq data from 6 patients. You can find metadata related to the patients in the metadata.csv file. For each patient, two measurements was taken: one before influenza vaccination (e.g. 09-0) and the other 7 days after the vaccination (e.g. 09-7). How much cells are in the scRNA-seq dataset? How much in BCR-seq dataset? How many cells of young patients have BCR-seq data? How many cells of old post-vaccination patients have RNA-seq data?"
+}
