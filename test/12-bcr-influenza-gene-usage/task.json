@@ -1,0 +1,64 @@
+{
+  "data": [
+    {
+      "type": "GEO",
+      "uri": "GSM5340842",
+      "path": "09-0"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM5340843",
+      "path": "09-7"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM5340854",
+      "path": "09-0"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM5340855",
+      "path": "09-7"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM5340840",
+      "path": "94-0"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM5340841",
+      "path": "94-7"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM5340852",
+      "path": "94-0"
+    },
+    {
+      "type": "GEO",
+      "uri": "GSM5340853",
+      "path": "94-7"
+    }
+  ],
+  "grader": {
+    "config": {
+      "ground_truth": {
+        "cell_type_IGKV4_1": "Age-associated B cells",
+        "patient_different_cell_type_IGKV4_1": "09",
+        "plasmablasts_vdj_junction_length": 17.0,
+        "j6_more_expressed_in_cell_type": "Plasma cells"
+      },
+      "tolerances": {
+      }
+    },
+    "type": "numeric_tolerance"
+  },
+  "id": "10x-clonotype-networks-bcr-influenza",
+  "metadata": {
+    "eval_type": "scientific",
+    "kit": "bcr-influenza",
+    "task": "gene-usage"
+  },
+  "task": "There is RNA-seq 10X Cell Ranger data and BCR-seq data from 2 patients. You can find metadata related to the patients in the metadata.csv file. For each patient, two measurements was taken: one before influenza vaccination (e.g. 09-0) and the other 7 days after the vaccination (e.g. 09-7). Load the data, perform preprocessing and quality control. Keep only cells with single BCR chain pair. Keep only cells for which both BCR and RNA-seq data exist. Annotate cell types using cell_type.py script. Across all pre-vaccination samples, which cell type expresses IGKV4-1 the most (not counting for Naive B cells)? Will this hold if splitting pre-vaccination data per-patient? Output patient id in which it doesn't hold or '-' if it holds. What's mean heavy chain junction sequence length for plasmablasts? In what cell type (across all samples) is J6 gene expressed more: Memory B cells or Plasma cells?"
+}
