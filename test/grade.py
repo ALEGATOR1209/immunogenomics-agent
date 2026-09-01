@@ -4,7 +4,9 @@ import sys
 
 
 def _normalize_item(item):
-    return item.strip().lower() if isinstance(item, str) else item
+    # Compared as text: JSON gives no guarantee whether a model returns a
+    # numeric category as 67 or "67", and both are the same answer.
+    return str(item).strip().lower()
 
 
 def list_overlap_score(actual, expected):
@@ -32,10 +34,14 @@ def field_score(actual, expected, tolerance):
         return score, score == 1.0
 
     if tolerance is None:
-        if isinstance(actual, str) and isinstance(expected, str):
-            correct = actual.lower() == expected.lower()
-        else:
+        if actual is None:
+            # An explicit null is a non-answer, never a match for the string
+            # "None" that some tasks accept as a legitimate value.
+            return 0.0, False
+        if isinstance(expected, (list, dict)):
             correct = actual == expected
+        else:
+            correct = _normalize_item(actual) == _normalize_item(expected)
         return (1.0 if correct else 0.0), correct
 
     value = tolerance.get("value", 0)

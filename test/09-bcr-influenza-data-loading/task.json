@@ -140,5 +140,5 @@
     "kit": "bcr-influenza",
     "task": "data-loading"
   },
-  "task": "There is RNA-seq 10X Cell Ranger data and BCR-seq data from 6 patients. You can find metadata related to the patients in the metadata.csv file. For each patient, two measurements was taken: one before influenza vaccination (e.g. 09-0) and the other 7 days after the vaccination (e.g. 09-7). How much cells are in the scRNA-seq dataset? How much in BCR-seq dataset? How many cells of young patients have BCR-seq data? How many cells of old post-vaccination patients have RNA-seq data?"
+  "task": "There is RNA-seq 10X Cell Ranger data and BCR-seq data from 6 patients (use filtered contig annotations). You can find metadata related to the patients in the metadata.csv file. For each patient, two measurements was taken: one before influenza vaccination (e.g. 09-0) and the other 7 days after the vaccination (e.g. 09-7). How much cells are in the scRNA-seq dataset? How much in BCR-seq dataset? How many cells of young patients have BCR-seq data? How many cells of old post-vaccination patients have RNA-seq data?"
 }
