@@ -56,6 +56,9 @@
         "convergent_clonotype_change_rate": 4.7224564723211175
       },
       "tolerances": {
+        "expanded_cell_types": {
+          "type": "list_overlap"
+        },
         "largest_clones_cell_types": {
           "type": "list_overlap"
         },
