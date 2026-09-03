@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import json
+import math
 import sys
 
 
@@ -50,6 +51,23 @@ def field_score(actual, expected, tolerance):
             correct = abs(actual - expected) <= value
         except TypeError:
             return 0.0, False
+        return (1.0 if correct else 0.0), correct
+
+    if tolerance_type == "log10_absolute":
+        # For quantities like p-values that span many orders of magnitude,
+        # "close" only makes sense multiplicatively. Comparing on a log
+        # scale also guards against a lazy/default 0 answer: log10(0) is
+        # undefined, so a non-positive actual only matches a non-positive
+        # expected, never a tiny-but-positive ground truth.
+        try:
+            actual_val = float(actual)
+            expected_val = float(expected)
+        except (TypeError, ValueError):
+            return 0.0, False
+        if actual_val <= 0 or expected_val <= 0:
+            correct = actual_val == expected_val
+            return (1.0 if correct else 0.0), correct
+        correct = abs(math.log10(actual_val) - math.log10(expected_val)) <= value
         return (1.0 if correct else 0.0), correct
 
     raise ValueError(f"Unsupported tolerance type: {tolerance_type!r}")

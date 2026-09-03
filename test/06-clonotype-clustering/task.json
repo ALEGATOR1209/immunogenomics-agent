@@ -180,8 +180,8 @@
           "value": 0.5
         },
         "top_pval": {
-          "type": "absolute",
-          "value": 1e-35
+          "type": "log10_absolute",
+          "value": 1
         }
       }
     },
