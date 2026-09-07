@@ -124,32 +124,29 @@
   "grader": {
     "config": {
       "ground_truth": {
-        "n_cells_after_qc": 77874,
-        "n_clonotypes": 76007,
-        "max_clonotype": 32
+        "cluster_by": "patient",
+        "shared_post_vaccination_09": 32,
+        "correlation_value": -0.866685621272155,
+        "patient_09_correlation": "negative"
       },
       "tolerances": {
-        "n_cells_after_qc": {
+        "shared_post_vaccination_09": {
           "type": "absolute",
-          "value": 5000
+          "value": 8
         },
-        "n_clonotypes": {
+        "correlation_value": {
           "type": "absolute",
-          "value": 3800
-        },
-        "max_clonotype": {
-          "type": "absolute",
-          "value": 3
+          "value": 0.2
         }
       }
     },
     "type": "numeric_tolerance"
   },
-  "id": "10x-clonotype-analysis-bcr-influenza",
+  "id": "10x-repertoire-similarity-bcr-influenza",
   "metadata": {
     "eval_type": "scientific",
     "kit": "bcr-influenza",
-    "task": "clonotype-analysis"
+    "task": "repertoire-similarity"
   },
-  "task": "There is RNA-seq 10X Cell Ranger data and BCR-seq data from 6 patients (use filtered contig annotations). You can find metadata related to the patients in the metadata.csv file. For each patient, two measurements was taken: one before influenza vaccination (e.g. 09-0) and the other 7 days after the vaccination (e.g. 09-7). Load the data, perform preprocessing and quality control. Keep only cells with single BCR chain pair. Keep only cells for which both BCR and RNA-seq data exist. Output the remaining number of cells after filtering. Define clonotypes. Find the total number of identified clonotypes. Find the size of the largest clonotype."
+  "task": "There is RNA-seq 10X Cell Ranger data and BCR-seq data from 6 patients (use filtered contig annotations). You can find metadata related to the patients in the metadata.csv file. For each patient, two measurements was taken: one before influenza vaccination (e.g. 09-0) and the other 7 days after the vaccination (e.g. 09-7). Load the data, perform preprocessing and quality control. Keep only cells with single BCR chain pair. Keep only cells for which both BCR and RNA-seq data exist. Define clonotypes. Compute the Jaccard distance matrix between samples and use it to determine whether samples cluster together primarily by patient identity (write \"patient\") or by condition (post-vaccination vs pre-vaccination, write \"condition\"). How many clonotypes are shared between patient 09 samples from pre-vaccination and post-vaccination? Write the Pearson correlation of clonotype sizes between pre-vaccination and post-vaccination across all samples. In the patient 09, do we see a positive or negative correlation of clonotype sizes between pre-vaccination and post-vaccination samples? Write \"positive\" or \"negative\"."
 }
