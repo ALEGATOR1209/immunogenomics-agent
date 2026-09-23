@@ -1,0 +1,145 @@
+{
+  "data": [
+    { "type": "GEO", "uri": "GSM8086297", "path": "Pre-TXP/Patient1-Pre-TXP" },
+    { "type": "GEO", "uri": "GSM8086298", "path": "Pre-TXP/Patient1-Pre-TXP" },
+    { "type": "GEO", "uri": "GSM8086299", "path": "Pre-TXP/Patient1-Pre-TXP" },
+    { "type": "GEO", "uri": "GSM8086300", "path": "Pre-TXP/Patient2-Pre-TXP" },
+    { "type": "GEO", "uri": "GSM8086301", "path": "Pre-TXP/Patient2-Pre-TXP" },
+    { "type": "GEO", "uri": "GSM8086302", "path": "Pre-TXP/Patient2-Pre-TXP" },
+    { "type": "GEO", "uri": "GSM8086303", "path": "Pre-TXP/Patient3-Pre-TXP" },
+    { "type": "GEO", "uri": "GSM8086304", "path": "Pre-TXP/Patient3-Pre-TXP" },
+    { "type": "GEO", "uri": "GSM8086305", "path": "Pre-TXP/Patient3-Pre-TXP" },
+    { "type": "GEO", "uri": "GSM8086306", "path": "Pre-TXP/Patient4-Pre-TXP" },
+    { "type": "GEO", "uri": "GSM8086307", "path": "Pre-TXP/Patient4-Pre-TXP" },
+    { "type": "GEO", "uri": "GSM8086308", "path": "Pre-TXP/Patient4-Pre-TXP" },
+    { "type": "GEO", "uri": "GSM8086309", "path": "No-ACR/Patient4-BX2" },
+    { "type": "GEO", "uri": "GSM8086310", "path": "No-ACR/Patient4-BX2" },
+    { "type": "GEO", "uri": "GSM8086311", "path": "No-ACR/Patient4-BX2" },
+    { "type": "GEO", "uri": "GSM8086312", "path": "Pre-TXP/Patient5-Pre-TXP" },
+    { "type": "GEO", "uri": "GSM8086313", "path": "Pre-TXP/Patient5-Pre-TXP" },
+    { "type": "GEO", "uri": "GSM8086314", "path": "Pre-TXP/Patient5-Pre-TXP" },
+    { "type": "GEO", "uri": "GSM8086315", "path": "No-ACR/Patient5-BX1" },
+    { "type": "GEO", "uri": "GSM8086316", "path": "No-ACR/Patient5-BX1" },
+    { "type": "GEO", "uri": "GSM8086317", "path": "No-ACR/Patient5-BX1" },
+    { "type": "GEO", "uri": "GSM8086318", "path": "Pre-TXP/Patient6-Pre-TXP" },
+    { "type": "GEO", "uri": "GSM8086319", "path": "Pre-TXP/Patient6-Pre-TXP" },
+    { "type": "GEO", "uri": "GSM8086320", "path": "Pre-TXP/Patient6-Pre-TXP" },
+    { "type": "GEO", "uri": "GSM8086321", "path": "Late-ACR/Patient6-BX2" },
+    { "type": "GEO", "uri": "GSM8086322", "path": "Late-ACR/Patient6-BX2" },
+    { "type": "GEO", "uri": "GSM8086323", "path": "Late-ACR/Patient6-BX2" },
+    { "type": "GEO", "uri": "GSM8086324", "path": "Late-ACR/Patient6-BX3" },
+    { "type": "GEO", "uri": "GSM8086325", "path": "Late-ACR/Patient6-BX3" },
+    { "type": "GEO", "uri": "GSM8086326", "path": "Late-ACR/Patient6-BX3" },
+    { "type": "GEO", "uri": "GSM8086327", "path": "Late-ACR/Patient6-BX4" },
+    { "type": "GEO", "uri": "GSM8086328", "path": "Late-ACR/Patient6-BX4" },
+    { "type": "GEO", "uri": "GSM8086329", "path": "Late-ACR/Patient6-BX4" },
+    { "type": "GEO", "uri": "GSM8086330", "path": "Late-ACR/Patient6-BX5" },
+    { "type": "GEO", "uri": "GSM8086331", "path": "Late-ACR/Patient6-BX5" },
+    { "type": "GEO", "uri": "GSM8086332", "path": "Late-ACR/Patient6-BX5" },
+    { "type": "GEO", "uri": "GSM8086333", "path": "No-ACR/Patient7-BX2" },
+    { "type": "GEO", "uri": "GSM8086334", "path": "No-ACR/Patient7-BX2" },
+    { "type": "GEO", "uri": "GSM8086335", "path": "No-ACR/Patient7-BX2" },
+    { "type": "GEO", "uri": "GSM8086336", "path": "Late-ACR/Patient7-BX3" },
+    { "type": "GEO", "uri": "GSM8086337", "path": "Late-ACR/Patient7-BX3" },
+    { "type": "GEO", "uri": "GSM8086338", "path": "Late-ACR/Patient7-BX3" },
+    { "type": "GEO", "uri": "GSM8086339", "path": "Late-ACR/Patient7-BX4" },
+    { "type": "GEO", "uri": "GSM8086340", "path": "Late-ACR/Patient7-BX4" },
+    { "type": "GEO", "uri": "GSM8086341", "path": "Late-ACR/Patient7-BX4" },
+    { "type": "GEO", "uri": "GSM8086342", "path": "Late-ACR/Patient8-BX2" },
+    { "type": "GEO", "uri": "GSM8086343", "path": "Late-ACR/Patient8-BX2" },
+    { "type": "GEO", "uri": "GSM8086344", "path": "Late-ACR/Patient8-BX2" },
+    { "type": "GEO", "uri": "GSM8086345", "path": "Late-ACR/Patient9-BX1" },
+    { "type": "GEO", "uri": "GSM8086346", "path": "Late-ACR/Patient9-BX1" },
+    { "type": "GEO", "uri": "GSM8086347", "path": "Late-ACR/Patient9-BX1" },
+    { "type": "GEO", "uri": "GSM8086348", "path": "Late-ACR/Patient10-BX1" },
+    { "type": "GEO", "uri": "GSM8086349", "path": "Late-ACR/Patient10-BX1" },
+    { "type": "GEO", "uri": "GSM8086350", "path": "Late-ACR/Patient10-BX1" },
+    { "type": "GEO", "uri": "GSM8086351", "path": "Late-ACR/Patient11-BX1" },
+    { "type": "GEO", "uri": "GSM8086352", "path": "Late-ACR/Patient11-BX1" },
+    { "type": "GEO", "uri": "GSM8086353", "path": "Late-ACR/Patient11-BX1" },
+    { "type": "GEO", "uri": "GSM8086354", "path": "Late-ACR/Patient11-BX2" },
+    { "type": "GEO", "uri": "GSM8086355", "path": "Late-ACR/Patient11-BX2" },
+    { "type": "GEO", "uri": "GSM8086356", "path": "Late-ACR/Patient11-BX2" },
+    { "type": "GEO", "uri": "GSM8086357", "path": "Late-ACR/Patient11-BX3" },
+    { "type": "GEO", "uri": "GSM8086358", "path": "Late-ACR/Patient11-BX3" },
+    { "type": "GEO", "uri": "GSM8086359", "path": "Late-ACR/Patient11-BX3" },
+    { "type": "GEO", "uri": "GSM8086360", "path": "Late-ACR/Patient12-BX1" },
+    { "type": "GEO", "uri": "GSM8086361", "path": "Late-ACR/Patient12-BX1" },
+    { "type": "GEO", "uri": "GSM8086362", "path": "Late-ACR/Patient12-BX1" },
+    { "type": "GEO", "uri": "GSM8086363", "path": "Late-ACR/Patient12-BX2" },
+    { "type": "GEO", "uri": "GSM8086364", "path": "Late-ACR/Patient12-BX2" },
+    { "type": "GEO", "uri": "GSM8086365", "path": "Late-ACR/Patient12-BX2" },
+    { "type": "GEO", "uri": "GSM8086366", "path": "Resolved/Patient12-BX3" },
+    { "type": "GEO", "uri": "GSM8086367", "path": "Resolved/Patient12-BX3" },
+    { "type": "GEO", "uri": "GSM8086368", "path": "Resolved/Patient12-BX3" },
+    { "type": "GEO", "uri": "GSM8086369", "path": "Resolved/Patient12-BX4" },
+    { "type": "GEO", "uri": "GSM8086370", "path": "Resolved/Patient12-BX4" },
+    { "type": "GEO", "uri": "GSM8086371", "path": "Resolved/Patient12-BX4" },
+    { "type": "GEO", "uri": "GSM8086372", "path": "Resolved/Patient12-BX5" },
+    { "type": "GEO", "uri": "GSM8086373", "path": "Resolved/Patient12-BX5" },
+    { "type": "GEO", "uri": "GSM8086374", "path": "Resolved/Patient12-BX5" },
+    { "type": "GEO", "uri": "GSM8086375", "path": "Late-ACR/Patient13-BX1" },
+    { "type": "GEO", "uri": "GSM8086376", "path": "Late-ACR/Patient13-BX1" },
+    { "type": "GEO", "uri": "GSM8086377", "path": "Late-ACR/Patient13-BX1" },
+    { "type": "GEO", "uri": "GSM8086378", "path": "Resolved/Patient13-BX2" },
+    { "type": "GEO", "uri": "GSM8086379", "path": "Resolved/Patient13-BX2" },
+    { "type": "GEO", "uri": "GSM8086380", "path": "Resolved/Patient13-BX2" },
+    { "type": "GEO", "uri": "GSM8086381", "path": "Late-ACR/Patient14-BX1" },
+    { "type": "GEO", "uri": "GSM8086382", "path": "Late-ACR/Patient14-BX1" },
+    { "type": "GEO", "uri": "GSM8086383", "path": "Late-ACR/Patient14-BX1" },
+    { "type": "GEO", "uri": "GSM8086384", "path": "Resolved/Patient14-BX4" },
+    { "type": "GEO", "uri": "GSM8086385", "path": "Resolved/Patient14-BX4" },
+    { "type": "GEO", "uri": "GSM8086386", "path": "Resolved/Patient14-BX4" }
+  ],
+  "grader": {
+    "config": {
+      "ground_truth": {
+        "n_cells_after_qc": 7194,
+        "n_tcrs_after_qc": 2332,
+        "n_bcrs_after_qc": 3122,
+        "n_clonotypes_tcr": 1726,
+        "max_clonotype_tcr": 31,
+        "n_clonotypes_bcr": 1998,
+        "max_clonotype_bcr": 115
+            },
+      "tolerances": {
+        "n_cells_after_qc": {
+          "type": "absolute",
+          "value": 1000
+        },
+        "n_tcrs_after_qc": {
+          "type": "absolute",
+          "value": 700
+        },
+        "n_bcrs_after_qc": {
+          "type": "absolute",
+          "value": 700
+        },
+        "n_clonotypes_tcr": {
+          "type": "absolute",
+          "value": 400
+        },
+        "max_clonotype_tcr": {
+          "type": "absolute",
+          "value": 5
+        },
+        "n_clonotypes_bcr": {
+          "type": "absolute",
+          "value": 400
+        },
+        "max_clonotype_bcr": {
+          "type": "absolute",
+          "value": 20
+        }
+      }
+    },
+    "type": "numeric_tolerance"
+  },
+  "id": "14-liver-clonotype-analyzis",
+  "metadata": {
+    "eval_type": "scientific",
+    "kit": "liver",
+    "task": "clonotype-analysis"
+  },
+  "task": "There's liver transplantation data. There are four types of statuses (Pre-TXP - before transplantation, No-ACR - no rejection, Late-ACR - rejection, resolved - rejection treated successfully). Some patients were sampled (biopsy) several times at different time points (e.g. BX-1, BX-2, BX-3). For each sample, RNA-seq, TCR-seq and BCR-seq information is available. Load the data, perform preprocessing and quality control. Use 10% threshold for mitochondrial genes. Keep BCRs and TCRs that consist of exactly one productive chain pair. Output the remaining number of cells, TCRs, BCRs, after filtering. Define clonotypes for both TCRs and BCRs. Find the total number of identified clonotypes per receptor type. Find the size of the largest clonotype per receptor type."
+}
