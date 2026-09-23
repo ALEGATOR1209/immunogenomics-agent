@@ -14,7 +14,7 @@ or a list of them (one task can need several GEO samples):
 Each entry becomes data/<uri>/ (accession as the folder name - task prompts
 are expected to tell the agent what each accession represents, rather than
 this script encoding a friendly sample name). For "type": "GEO", the
-accession's entire suppl/ directory on GEO's FTP server is downloaded as-is
+accession's (GSM sample or GSE series) entire suppl/ directory on GEO's FTP server is downloaded as-is
 (GEO's own listing is the source of truth for what belongs to a sample, no
 per-task file filtering).
 
@@ -51,9 +51,11 @@ def geo_suppl_path(accession):
     # NCBI buckets each sample's files under .../GSMnnnnnn/GSMxxxxxxx/suppl/,
     # where the bucket name replaces the accession's last 3 digits with
     # "nnn" - e.g. GSM4339771 -> /geo/samples/GSM4339nnn/GSM4339771/suppl.
-    if not (accession.startswith("GSM") and accession[3:].isdigit() and len(accession) > 6):
-        die(f"'{accession}' doesn't look like a GEO sample accession (expected e.g. GSM4339771)")
-    return f"/geo/samples/{accession[:-3]}nnn/{accession}/suppl"
+    # Series (GSE) accessions use the same bucketing under /geo/series/.
+    if not (accession[:3] in ("GSM", "GSE") and accession[3:].isdigit() and len(accession) > 6):
+        die(f"'{accession}' doesn't look like a GEO sample or series accession (expected e.g. GSM4339771 or GSE243013)")
+    kind = "samples" if accession.startswith("GSM") else "series"
+    return f"/geo/{kind}/{accession[:-3]}nnn/{accession}/suppl"
 
 
 def fetch_geo_sample(accession, dest_dir, force):

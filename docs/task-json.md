@@ -198,8 +198,8 @@ Each entry needs:
 - `"type"` - only `"GEO"` is implemented. Anything else makes
   `fetch_data.py` die loudly (not silently skip), so a typo surfaces
   immediately.
-- `"uri"` - a GEO sample accession (`GSMxxxxxxx`). `fetch_data.py`
-  downloads that sample's entire `suppl/` directory from GEO's FTP server
+- `"uri"` - a GEO sample (`GSMxxxxxxx`) or series (`GSExxxxxx`) accession.
+  `fetch_data.py` downloads that accession's entire `suppl/` directory from GEO's FTP server
   as-is - no per-file filtering, so make sure you actually want everything
   GEO lists there.
 - `"path"` (optional) - overrides the destination folder under `data/`,
