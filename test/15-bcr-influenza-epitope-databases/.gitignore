@@ -1,0 +1,4 @@
+!data/
+data/*
+!data/metadata.csv
+!data/cell_type.py

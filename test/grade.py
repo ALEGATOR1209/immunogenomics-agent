@@ -10,6 +10,20 @@ def _normalize_item(item):
     return str(item).strip().lower()
 
 
+def _as_number(value):
+    """The value as a float, or None if it isn't numeric. Booleans are not."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value.strip())
+        except ValueError:
+            return None
+    return None
+
+
 def list_overlap_score(actual, expected):
     """Jaccard-style partial credit: |correct| / (|ground_truth| + |incorrect guesses|)."""
     if isinstance(actual, str):
@@ -42,7 +56,13 @@ def field_score(actual, expected, tolerance):
         if isinstance(expected, (list, dict)):
             correct = actual == expected
         else:
-            correct = _normalize_item(actual) == _normalize_item(expected)
+            # Numbers compare as numbers so 17 matches 17.0; everything else
+            # compares as text so 67 matches "67".
+            actual_n, expected_n = _as_number(actual), _as_number(expected)
+            if actual_n is not None and expected_n is not None:
+                correct = actual_n == expected_n
+            else:
+                correct = _normalize_item(actual) == _normalize_item(expected)
         return (1.0 if correct else 0.0), correct
 
     value = tolerance.get("value", 0)
