@@ -94,21 +94,52 @@
   "grader": {
     "config": {
       "ground_truth": {
-        "n_cells": 208569,
-        "n_tcr": 3197,
-        "n_bcr": 4395,
-        "n_tcr_late_acr": 2415
-      },
+        "n_cells_after_qc": 7194,
+        "n_tcrs_after_qc": 2332,
+        "n_bcrs_after_qc": 3122,
+        "n_clonotypes_tcr": 1726,
+        "max_clonotype_tcr": 31,
+        "n_clonotypes_bcr": 1998,
+        "max_clonotype_bcr": 115
+            },
       "tolerances": {
+        "n_cells_after_qc": {
+          "type": "absolute",
+          "value": 1000
+        },
+        "n_tcrs_after_qc": {
+          "type": "absolute",
+          "value": 700
+        },
+        "n_bcrs_after_qc": {
+          "type": "absolute",
+          "value": 700
+        },
+        "n_clonotypes_tcr": {
+          "type": "absolute",
+          "value": 400
+        },
+        "max_clonotype_tcr": {
+          "type": "absolute",
+          "value": 5
+        },
+        "n_clonotypes_bcr": {
+          "type": "absolute",
+          "value": 400
+        },
+        "max_clonotype_bcr": {
+          "type": "absolute",
+          "value": 20
+        }
       }
     },
     "type": "numeric_tolerance"
   },
-  "id": "14-liver-data-loading",
+  "id": "18-liver-clonotype-analyzis",
   "metadata": {
     "eval_type": "scientific",
     "kit": "liver",
-    "task": "data-loading"
+    "task": "clonotype-analysis"
   },
-  "task": "There's liver transplantation data. There are four types of statuses (Pre-TXP - before transplantation, No-ACR - no rejection, Late-ACR - rejection, resolved - rejection treated successfully). Some patients were sampled (biopsy) several times at different time points (e.g. BX-1, BX-2, BX-3). For each sample, RNA-seq, TCR-seq and BCR-seq information is available. How many cells are available with transcriptomic data? How many TCRs and BCRs are available? How many TCRs correspond to Late-ACR?"
+  "task": "There's liver transplantation data. There are four types of statuses (Pre-TXP - before transplantation, No-ACR - no rejection, Late-ACR - rejection, resolved - rejection treated successfully). Some patients were sampled (biopsy) several times at different time points (e.g. BX-1, BX-2, BX-3). For each sample, RNA-seq, TCR-seq and BCR-seq information is available. Load the data, perform preprocessing and quality control. Use 10% threshold for mitochondrial genes. Keep BCRs and TCRs that consist of exactly one productive chain pair. Output the remaining number of cells, TCRs, BCRs, after filtering. Define clonotypes for both TCRs and BCRs. Find the total number of identified clonotypes per receptor type. Find the size of the largest clonotype per receptor type."
 }

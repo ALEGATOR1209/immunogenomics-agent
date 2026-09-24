@@ -94,38 +94,21 @@
   "grader": {
     "config": {
       "ground_truth": {
-        "airr_modality_for_downstream": "tcr",
-        "largest_clonotypes_status": [
-          "Late-ACR", "Resolved"
-        ],
-        "statuses_sharing_clonotypes": [
-          "Late-ACR", "Resolved"
-        ],
-        "clonotypes_form_networks_across_statuses": "false",
-        "expanded_clonotype_cell_type": "T cells",
-        "supported_theories": [
-          "1", "3"
-        ]
+        "n_cells": 208569,
+        "n_tcr": 3197,
+        "n_bcr": 4395,
+        "n_tcr_late_acr": 2415
       },
       "tolerances": {
-        "largest_clonotypes_status": {
-          "type": "list_overlap"
-        },
-        "statuses_sharing_clonotypes": {
-          "type": "list_overlap"
-        },
-        "supported_theories": {
-          "type": "list_overlap"
-        }
       }
     },
     "type": "numeric_tolerance"
   },
-  "id": "13-liver-data",
+  "id": "17-liver-data-loading",
   "metadata": {
     "eval_type": "scientific",
     "kit": "liver",
-    "task": "complex-biological-effect"
+    "task": "data-loading"
   },
-  "task": "There's liver transplantation data. There are four types of statuses (Pre-TXP - before transplantation, No-ACR - no rejection, Late-ACR - rejection, resolved - rejection treated successfully). Some patients were sampled (biopsy) several times at different time points (e.g. BX-1, BX-2, BX-3). For each sample, RNA-seq, TCR-seq and BCR-seq information is available. You can use cell_type.py if you need to annotate cell types. Which immune repertoir modality (\"tcr\" or \"bcr\") aligns better with RNA-seq data and would be more suitable for downstream analysis? Which status(es) features largest clonotypes? For clonotypes shared between statuses, which two statuses usually share them? \"true\" or \"false\": clonotypes in this data often form networks spanning clinical statuses. Expanded clonotypes are defined as clonotypes consisting of >2 cells. In what cell type are they localized? Which of these theories are supported by data? (1) Liver transplantation causes immune response resulting in clonotype expansion. (2) Relative expansion decreases after transplantation, when rejection is resolved. (3) In absolute numbers, immune response is much stronger for active rejection patients, but it's roughly the same for no-rejection and rejection patients when corrected to the number of clonotypes."
+  "task": "There's liver transplantation data. There are four types of statuses (Pre-TXP - before transplantation, No-ACR - no rejection, Late-ACR - rejection, resolved - rejection treated successfully). Some patients were sampled (biopsy) several times at different time points (e.g. BX-1, BX-2, BX-3). For each sample, RNA-seq, TCR-seq and BCR-seq information is available. How many cells are available with transcriptomic data? How many TCRs and BCRs are available? How many TCRs correspond to Late-ACR?"
 }
