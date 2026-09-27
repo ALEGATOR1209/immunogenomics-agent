@@ -1,0 +1,45 @@
+{
+  "data": [
+    { "type": "GEO", "uri": "GSM7976164", "path": "PSA1" },
+    { "type": "GEO", "uri": "GSM7976166", "path": "PSA1" },
+    { "type": "GEO", "uri": "GSM7976167", "path": "PSA2" },
+    { "type": "GEO", "uri": "GSM7976169", "path": "PSA2" },
+    { "type": "GEO", "uri": "GSM7976170", "path": "PSA3a" },
+    { "type": "GEO", "uri": "GSM7976172", "path": "PSA3a" },
+    { "type": "GEO", "uri": "GSM7976173", "path": "PSA3b" },
+    { "type": "GEO", "uri": "GSM7976175", "path": "PSA3b" },
+    { "type": "GEO", "uri": "GSM7976176", "path": "PSA4" },
+    { "type": "GEO", "uri": "GSM7976178", "path": "PSA4" },
+    { "type": "GEO", "uri": "GSM7976179", "path": "PSA5" },
+    { "type": "GEO", "uri": "GSM7976181", "path": "PSA5" }
+  ],
+  "grader": {
+    "config": {
+      "ground_truth": {
+        "theory_1_decision": "True",
+        "theory_1_correlation": 0.5386632259480197,
+        "theory_2_decision": "False",
+        "theory_2_output": 61,
+        "skin_associated_clonotypes_cell_type": "Regulatory T cells"
+      },
+      "tolerances": {
+        "theory_1_correlation": {
+          "type": "absolute",
+          "value": 0.15
+        },
+        "theory_2_output": {
+          "type": "absolute",
+          "value": 6
+        }
+      }
+    },
+    "type": "numeric_tolerance"
+  },
+  "id": "24-psoriasis-1",
+  "metadata": {
+    "eval_type": "scientific",
+    "kit": "psoriasis",
+    "task": "complex-biological-effect"
+  },
+  "task": "There is a RNA-seq + TCR-seq data from 5 psoriatic arthritis (PsA) patients. Samples 3a and 3b are the replicates of patient 3. You need to only use 3a for the downstream analysis. Load the data and perform cell type annotation. Use scripts loading.py and cell_type.py for that. Theory 1: immune repertoire is shared between synovial fluid and synovial tissue. Is this supported by data? Output \"True\" or \"False\". If the theory is true, output also pearson correlation of clonotypes between these two tissue types (pooled from all samples). Else, output -1. Theory 2: the biggest clonotype is characterized primarily by blood tissue, followed by clonotypes dominated by skin tissue and then clonotypes with synovial flyid/tissue. Is this supported by data? Output \"True\" or \"False\". If the theory is true, output the size of the largest clonotype (only tissue-typed cells). If it's false, output the size of the largest skin-dominated clonotype. What is the most common cell type for skin-associated clonotypes?"
+}
