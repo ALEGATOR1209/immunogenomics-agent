@@ -1,0 +1,37 @@
+{
+  "data": [
+    { "type": "GEO", "uri": "GSM7976164", "path": "PSA1" },
+    { "type": "GEO", "uri": "GSM7976166", "path": "PSA1" },
+    { "type": "GEO", "uri": "GSM7976167", "path": "PSA2" },
+    { "type": "GEO", "uri": "GSM7976169", "path": "PSA2" },
+    { "type": "GEO", "uri": "GSM7976170", "path": "PSA3a" },
+    { "type": "GEO", "uri": "GSM7976172", "path": "PSA3a" },
+    { "type": "GEO", "uri": "GSM7976173", "path": "PSA3b" },
+    { "type": "GEO", "uri": "GSM7976175", "path": "PSA3b" },
+    { "type": "GEO", "uri": "GSM7976176", "path": "PSA4" },
+    { "type": "GEO", "uri": "GSM7976178", "path": "PSA4" },
+    { "type": "GEO", "uri": "GSM7976179", "path": "PSA5" },
+    { "type": "GEO", "uri": "GSM7976181", "path": "PSA5" }
+  ],
+  "grader": {
+    "config": {
+      "ground_truth": {
+        "theory_1_decision": "True",
+        "theory_1_output": "synovial fluid",
+        "theory_2_decision": "True",
+        "theory_2_output_1": 2,
+        "theory_2_output_2": "CA*IF",
+        "theory_3_decision": "False",
+        "theory_3_output": "TRAV4"
+      }
+    },
+    "type": "numeric_tolerance"
+  },
+  "id": "25-psoriasis-2",
+  "metadata": {
+    "eval_type": "scientific",
+    "kit": "psoriasis",
+    "task": "complex-biological-effect"
+  },
+  "task": "There is a RNA-seq + TCR-seq data from 5 psoriatic arthritis (PsA) patients. Samples 3a and 3b are the replicates of patient 3. You need to only use 3a for the downstream analysis. Load the data and perform cell type annotation. Use scripts loading.py and cell_type.py for that. Theory 1: Synovial fluid repertoir shares clonotypes with blood. Does data from patients 1, 4, and 5 support this (consider the effect significant if >1% of the repertoire is shared). If the theory is supported, output \"True\", else output \"False\". If true, output which of the two tissues exhibits larger proportion of shared clonotypes (majority voting of per-patient metrics). If false, output the sequence of the largest blood clonotype of the 3 patients. Theory 2: There are identical clonotypes in skin and synovial samples (tissue and fluid). Looking at the patient 3, is this theory supported by data? If so, look at the clonotypes shared across all three tissues. Output the number of clonotypes (output 1). Also, output (output 2) the common CDR3 motif (TCR-alpha, 2+ AA long) that these clonotypes share. For example, for \"ABCDEF\" and \"ABDCEF\" it would be \"AB*EF\". For \"ABCDEF\" and \"BBEBHF\" it would be \"*\". Look only at the matching beginning and/or ending of the sequences, no need to do elaborate alignment. If the theory is false, output the number of clonotypes shared between synovial fluid and tissue and the matching motif for top 2 of them in the same format. Theory 3: Clones that are shared between blood and synovial tissue/fluid exhibit well-defined antigen specificity. If this supported by data pooled from all patients? If so, output the name of the most prevalent antigen. If not, output which of these genes could is the best choice for marker gene for the largest shared clonotype: TRAV1-1, TRAV4, GZMK, IL17A."
+}
