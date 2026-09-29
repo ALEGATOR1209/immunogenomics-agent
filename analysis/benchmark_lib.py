@@ -7,6 +7,7 @@ here.
 """
 
 import fnmatch
+import gzip
 import io
 import json
 import re
@@ -41,11 +42,15 @@ TOKEN_FIELDS = {  # column name -> key in run.jsonl's usage object
 
 def count_tokens(run_dir: Path) -> dict[str, int | None]:
   events_file = run_dir / "run.jsonl"
-  if not events_file.exists():
+  if events_file.exists():
+    lines = events_file.open(encoding="utf-8", errors="replace")
+  elif events_file.with_suffix(".jsonl.gz").exists():  # older run dirs get gzipped to save disk
+    lines = gzip.open(events_file.with_suffix(".jsonl.gz"), "rt", encoding="utf-8", errors="replace")
+  else:
     return {column: None for column in TOKEN_FIELDS}
 
   totals = {column: 0 for column in TOKEN_FIELDS}
-  for line in events_file.open(encoding="utf-8", errors="replace"):
+  for line in lines:
     line = line.strip()
     if not line.startswith("{"):  # the container logs boot noise before the event stream
       continue
