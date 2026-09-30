@@ -527,7 +527,7 @@ def plot_total_score(benchmarks: pd.DataFrame, by: str = "benchmark", column: st
       Patch(facecolor=key, edgecolor=key, label="No skills"),
       Patch(fill=False, edgecolor=key, linewidth=2.5, linestyle=(0, (3, 2)), label="Skills"),
     ],
-    frameon=False, loc="lower right", bbox_to_anchor=(1, 1.0), ncol=2,
+    frameon=False, loc="upper left", bbox_to_anchor=(1.01, 1),  # clear of the subtitle at any width
   )
   style_bar_axis(ax)
   return stats
