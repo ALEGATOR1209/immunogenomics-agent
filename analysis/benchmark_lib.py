@@ -18,7 +18,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
-from matplotlib.patches import Patch
+from matplotlib.patches import Patch, Rectangle
 from matplotlib.path import Path as MplPath
 from matplotlib.ticker import MaxNLocator
 from scipy.stats import false_discovery_control, mannwhitneyu, wilcoxon
@@ -78,6 +78,8 @@ def load_runs(
   # model's numbers must filter explicitly rather than assume the tree is already scoped to it.
   rows = []
   for runs_dir in sorted(test_dir.glob("*/runs")):
+    task_json = runs_dir.parent / "task.json"
+    metadata = json.loads(task_json.read_text()).get("metadata", {}) if task_json.exists() else {}
     for run_dir in sorted(p for p in runs_dir.iterdir() if p.is_dir()):
       result_file = run_dir / "eval_result.json"
       if not result_file.exists():
@@ -89,6 +91,9 @@ def load_runs(
       rows.append(
         {
           "task": runs_dir.parent.name,
+          "eval_type": metadata.get("eval_type"),
+          "kit": metadata.get("kit"),
+          "task_type": metadata.get("task"),
           "run": run_dir.name,
           "start_time": pd.to_datetime(r.get("start_time")),
           "skills": r["skills"],
@@ -104,7 +109,6 @@ def load_runs(
           "harness": r.get("harness"),
           "model_server": r.get("model_server"),
           "hardware": hardware,
-          "fields": r.get("fields", {}),
         }
       )
   return pd.DataFrame(rows)
@@ -208,11 +212,59 @@ COLUMN_LABELS = {
 }
 COLUMN_SCALES = {"total_tokens": 1e6}  # plotted in the label's units, not raw counts
 COLUMN_TICK_FORMATS = {"total_tokens": lambda v, _: f"{v:,.2f}"}
+TASK_TYPE_ORDER = (
+  "data-loading",
+  "clonotype-analysis",
+  "clonotype-networks",
+  "gene-usage",
+  "repertoire-similarity",
+  "clonotype-clustering",
+  "epitope-databases",
+  "complex-biological-effect",
+)
+TASK_TYPE_ALIASES = {"clonotype-analyzis": "clonotype-analysis"}  # after 18-liver-clonotype-analyzis
 
 
-def plot_benchmark(runs: pd.DataFrame, column: str, model_label: str, ax=None, points: bool = True):
+def group_tick_labels(groups: list[str], aggregation: str) -> list[str]:
+  if aggregation == "task_type":
+    return [f"{i + 1}\n" + textwrap.fill(g.replace("-", " "), 12) for i, g in enumerate(groups)]
+  return [f'{g.split("-")[0]}\n' + textwrap.fill(g.split("-", 1)[1], 12) for g in groups]
+
+
+def ordered_groups(runs: pd.DataFrame, aggregation: str) -> tuple[pd.DataFrame, list[str]]:
+  # the groups to report per, in display order: task types follow the pipeline order,
+  # anything else (tasks, or a task type not in TASK_TYPE_ORDER) sorts by name
+  if aggregation != "task_type":
+    return runs, sorted(runs[aggregation].unique())
+  runs = runs.assign(task_type=runs["task_type"].replace(TASK_TYPE_ALIASES))
+  present = set(runs["task_type"])
+  return runs, [t for t in TASK_TYPE_ORDER if t in present] + sorted(present - set(TASK_TYPE_ORDER))
+
+
+POINT_SIZE = 22
+POINT_STEP = 0.045  # x spacing (axis units) at which POINT_SIZE dots just touch
+POINT_ROW_WIDTH = 0.28  # a row of tied runs never gets wider than the box (0.3)
+
+
+def _swarm_layout(values: np.ndarray, y_range: float) -> tuple[np.ndarray, np.ndarray]:
+  # runs whose values would overlap (e.g. many scores of exactly 1.0) are laid out side by side
+  # at their exact value; a row too long to fit the box is packed tighter with smaller dots,
+  # so every run stays visible without being moved off the value it scored
+  bins = np.round(values / (y_range / 40)).astype(int)
+  dx, sizes = np.zeros(len(values)), np.full(len(values), float(POINT_SIZE))
+  for b in np.unique(bins):
+    idx = np.flatnonzero(bins == b)
+    if len(idx) == 1:
+      continue
+    step = min(POINT_STEP, POINT_ROW_WIDTH / (len(idx) - 1))
+    dx[idx] = (np.arange(len(idx)) - (len(idx) - 1) / 2) * step
+    sizes[idx] = POINT_SIZE * (step / POINT_STEP) ** 2  # scatter size is area
+  return dx, sizes
+
+
+def plot_benchmark(runs: pd.DataFrame, column: str, model_label: str, ax=None, points: bool = True, aggregation: str = "task"):
   runs = runs.assign(**{column: runs[column] / COLUMN_SCALES.get(column, 1.0)})
-  tasks = sorted(runs["task"].unique())
+  runs, tasks = ordered_groups(runs, aggregation)
   pos = {task: i for i, task in enumerate(tasks)}
   if ax is None:
     _, ax = plt.subplots(figsize=(11, 5.5))
@@ -225,13 +277,13 @@ def plot_benchmark(runs: pd.DataFrame, column: str, model_label: str, ax=None, p
 
   for skills, (color, _) in SERIES.items():
     offset = 0.19 if skills else -0.19
-    batches = {task: batch for task, batch in runs[runs["skills"] == skills].groupby("task")}
+    batches = {task: batch for task, batch in runs[runs["skills"] == skills].groupby(aggregation)}
     present = [t for t in tasks if t in batches]
     bp = ax.boxplot(
       [batches[t][column].values for t in present],
       positions=[pos[t] + offset for t in present],
       widths=0.3, patch_artist=True, manage_ticks=False, zorder=2,
-      whis=(0, 100), showfliers=False,  # n = 5; 1.5*IQR would call most points outliers
+      whis=1.5, showfliers=not points,  # with points on, the runs past the whiskers are already drawn
       showmeans=True, meanline=True,
       boxprops=dict(facecolor=color + "38", edgecolor=color, linewidth=1.2),  # 38 = ~22% alpha
       medianprops=dict(linewidth=0),
@@ -253,17 +305,16 @@ def plot_benchmark(runs: pd.DataFrame, column: str, model_label: str, ax=None, p
 
     if points:  # n = 5, so show the runs the box is drawn from
       for task, batch in batches.items():
-        spread = np.linspace(-0.07, 0.07, len(batch))
+        dx, sizes = _swarm_layout(batch[column].values, ylim[1] - ylim[0])
         ax.scatter(
-          pos[task] + offset + spread, batch[column],
-          s=22, color=color, edgecolor=SURFACE, linewidth=0.8, alpha=0.75, zorder=3,
+          pos[task] + offset + dx, batch[column],
+          s=sizes, color=color, edgecolor=SURFACE, linewidth=0.8 * np.sqrt(sizes / POINT_SIZE),
+          alpha=0.75, zorder=3,
         )
 
   label = COLUMN_LABELS.get(column, column.replace("_", " ").capitalize())
   ax.set_xticks(range(len(tasks)))
-  ax.set_xticklabels(
-    [f'{t.split("-")[0]}\n' + textwrap.fill(t.split("-", 1)[1], 12) for t in tasks], fontsize=9
-  )
+  ax.set_xticklabels(group_tick_labels(tasks, aggregation), fontsize=9)
   ax.set_xlim(-0.6, len(tasks) - 0.4)
   ax.set_ylim(*ylim)
   if column == "score":
@@ -272,12 +323,16 @@ def plot_benchmark(runs: pd.DataFrame, column: str, model_label: str, ax=None, p
     ax.yaxis.set_major_formatter(COLUMN_TICK_FORMATS.get(column, lambda v, _: f"{v:,.0f}"))
   ax.set_ylabel(label)
   ax.set_title(  # only the first letter, so a unit like (M) keeps its case
-    f"{model_label} — {label[0].lower() + label[1:]} per task, with and without skills",
+    f"{model_label} — {label[0].lower() + label[1:]} per {aggregation.replace('_', ' ')}, with and without skills",
     loc="left", pad=18,
+  )
+  box_sizes = runs.groupby([aggregation, "skills"]).size()
+  runs_per_box = (
+    f"{box_sizes.iloc[0]}" if box_sizes.nunique() == 1 else f"{box_sizes.min()}-{box_sizes.max()}"
   )
   ax.text(
     0, 1.02,
-    f"{RUNS_PER_BATCH} runs per box; box = IQR, whiskers = min-max, bar = mean, dots = individual runs",
+    f"{runs_per_box} runs per box; box = IQR, whiskers = 1.5×IQR, bar = mean, dots = individual runs",
     transform=ax.transAxes, ha="left", va="bottom", fontsize=9, color="#52514e",
   )
   ax.grid(axis="y", color="#e5e4e0", linewidth=0.8)
@@ -294,6 +349,188 @@ def plot_benchmark(runs: pd.DataFrame, column: str, model_label: str, ax=None, p
     frameon=False, loc="lower right", bbox_to_anchor=(1, 1.0), ncol=2,
   )
   return ax
+
+
+VENDOR_COLORS = {  # fixed per vendor, so a model keeps its color whichever subset is plotted
+  "alibaba": "#2a78d6",
+  "anthropic": "#eb6834",
+  "deepseek": "#1baf7a",
+  "google": "#eda100",
+  "meta": "#e87ba4",
+  "minimax": "#008300",
+  "nvidia": "#4a3aa7",
+  "openai": "#e34948",
+}
+VARIANT_MARKERS = ("o", "D", "s", "^")  # tells apart several benchmarks from one vendor
+HARDWARE_COLORS = {
+  "cloud": "#2a78d6",
+  "NVIDIA GeForce RTX 4070 SUPER": "#eb6834",
+  "Apple M5 Max 128GB": "#1baf7a",
+  "Apple M3 Max 36GB": "#eda100",
+}
+FALLBACK_COLOR = "#8a8984"
+
+
+def drop_sparse_tasks(benchmarks: pd.DataFrame, min_runs: int = 3) -> pd.DataFrame:
+  # a model's task is dropped when either arm (with / without skills) has fewer than min_runs
+  # runs: both arms go, so the two means a model is compared on always cover the same tasks
+  counts = benchmarks.groupby(["benchmark", "task", "skills"]).size().unstack("skills", fill_value=0)
+  keep = counts[(counts >= min_runs).all(axis=1)].index
+  return benchmarks.set_index(["benchmark", "task"]).loc[lambda d: d.index.isin(keep)].reset_index()
+
+
+VARIANT_HATCHES = ("", "////", "....", "xxxx")  # the bar-chart counterpart of VARIANT_MARKERS
+
+
+def _series_styles(runs: pd.DataFrame, by: str) -> pd.DataFrame:
+  # label, color, marker and hatch per series, so a model looks the same in every chart:
+  # by="benchmark" is colored by vendor, with a marker/hatch per benchmark within the vendor
+  if by == "benchmark":
+    series = runs[["vendor", "benchmark"]].drop_duplicates().sort_values(["vendor", "benchmark"])
+    variant = series.groupby("vendor").cumcount()
+    series["marker"] = [VARIANT_MARKERS[i] for i in variant]
+    series["hatch"] = [VARIANT_HATCHES[i] for i in variant]
+    series["color"] = series["vendor"].map(VENDOR_COLORS).fillna(FALLBACK_COLOR)
+  else:
+    order = list(HARDWARE_COLORS) if by == "hardware" else []
+    present = runs[by].unique()
+    series = pd.DataFrame({by: [s for s in order if s in present] + sorted(set(present) - set(order))})
+    series["marker"] = "o"
+    series["hatch"] = ""
+    series["color"] = series[by].map(HARDWARE_COLORS if by == "hardware" else {}).fillna(FALLBACK_COLOR)
+  series["label"] = series[by]
+  return series.reset_index(drop=True)
+
+
+def plot_models_by_task_type(benchmarks: pd.DataFrame, column: str, ax=None, by: str = "benchmark") -> pd.DataFrame:
+  # one dumbbell per series and task type: hollow = mean without skills, filled = mean with
+  # skills, so the line between them is the effect of skills. by="benchmark" is one series per
+  # model, identified by vendor color plus a marker shape per benchmark within the vendor;
+  # by="hardware" pools every model run on the same machine. Each series has a fixed slot
+  # in each group.
+  runs = benchmarks.assign(**{column: benchmarks[column] / COLUMN_SCALES.get(column, 1.0)})
+  runs, task_types = ordered_groups(runs, "task_type")
+  series = _series_styles(runs, by)
+  means = runs.groupby([by, "task_type", "skills"])[column].mean().unstack("skills")
+  if ax is None:
+    _, ax = plt.subplots(figsize=(13, 5.5))
+
+  step = 0.8 / len(series)
+  for i, s in enumerate(series.itertuples()):
+    color = s.color
+    for j, task_type in enumerate(task_types):
+      if (s.label, task_type) not in means.index:
+        continue  # this series never ran a task of this type
+      without, with_skills = means.loc[(s.label, task_type)].reindex([False, True])
+      x = j - 0.4 + step * (i + 0.5)
+      ax.plot([x, x], [without, with_skills], color=color, linewidth=1.2, alpha=0.6, zorder=2)
+      ax.scatter(x, without, s=34, marker=s.marker, facecolor=SURFACE, edgecolor=color, linewidth=1.5, zorder=3)
+      ax.scatter(x, with_skills, s=34, marker=s.marker, color=color, edgecolor=SURFACE, linewidth=0.8, zorder=3)
+
+  label = COLUMN_LABELS.get(column, column.replace("_", " ").capitalize())
+  ax.set_xticks(range(len(task_types)))
+  ax.set_xticklabels(group_tick_labels(task_types, "task_type"), fontsize=9)
+  ax.set_xlim(-0.5, len(task_types) - 0.5)
+  for j in range(1, len(task_types)):  # separate the groups, since each can hold a dozen marks
+    ax.axvline(j - 0.5, color="#e5e4e0", linewidth=0.8, zorder=1)
+  if column == "score":
+    ax.set_ylim(-0.03, 1.03)
+    ax.set_yticks(np.arange(0, 1.01, 0.25))
+  else:
+    ax.set_ylim(bottom=0)
+    ax.yaxis.set_major_formatter(COLUMN_TICK_FORMATS.get(column, lambda v, _: f"{v:,.0f}"))
+  ax.set_ylabel(label)
+  ax.set_title(f"Mean {label[0].lower() + label[1:]} per task type, by {by if by != 'benchmark' else 'model'}", loc="left", pad=18)
+  ax.text(
+    0, 1.02, "hollow = without skills, filled = with skills; line = effect of skills",
+    transform=ax.transAxes, ha="left", va="bottom", fontsize=9, color="#52514e",
+  )
+  ax.grid(axis="y", color="#e5e4e0", linewidth=0.8)
+  ax.set_axisbelow(True)
+  for side in ("top", "right", "left"):
+    ax.spines[side].set_visible(False)
+  ax.spines["bottom"].set_color("#c3c2b7")
+  ax.tick_params(length=0)
+  ax.legend(
+    handles=[
+      plt.Line2D(
+        [], [], linestyle="", marker=s.marker, markersize=6, color=s.color, label=s.label,
+      )
+      for s in series.itertuples()
+    ],
+    frameon=False, loc="upper left", bbox_to_anchor=(1.01, 1), fontsize=9,
+  )
+  return means.rename(columns={False: "no_skills", True: "skills"})
+
+
+def plot_total_score(benchmarks: pd.DataFrame, by: str = "benchmark", column: str = "score", ax=None) -> pd.DataFrame:
+  # the whole-benchmark number from plot_skill_summary (mean over every run, SEM error bars),
+  # one pair of bars per model (by="benchmark") or machine (by="hardware"), best first. Each
+  # pair takes its series color (+ hatch for a vendor's second model, as in
+  # plot_models_by_task_type); on the skills bar a dashed box spans the change from the
+  # no-skills mean, and the relative change is printed above the pair
+  scaled = benchmarks[column] / COLUMN_SCALES.get(column, 1.0)
+  stats = scaled.groupby([benchmarks[by], benchmarks["skills"]]).agg(["mean", "sem", "size"]).unstack("skills")
+  stats = stats.sort_values(("mean", True), ascending=False)
+  groups = list(stats.index)
+  styles = _series_styles(benchmarks, by).set_index("label").loc[groups]
+  top = (stats["mean"] + stats["sem"].fillna(0)).max().max()
+  pad = 0.02 * (1.0 if column == "score" else top)
+  if ax is None:
+    _, ax = plt.subplots(figsize=(max(6, 1.1 * len(groups)), 5.5))
+
+  value_format = VALUE_FORMATS.get(column, "{:,.0f}")
+  width = 0.36
+  for i, group in enumerate(groups):
+    color, hatch = styles.loc[group, "color"], styles.loc[group, "hatch"]
+    without, with_skills = (stats.loc[group, ("mean", s)] for s in (False, True))
+    pair_top = 0.0
+    for skills, mean in ((False, without), (True, with_skills)):
+      x = i + (0.2 if skills else -0.2)
+      error = np.nan_to_num(stats.loc[group, ("sem", skills)])
+      ax.bar(x, mean, width=width, color=color + "70", edgecolor=color, linewidth=1.2, hatch=hatch, zorder=2)
+      ax.errorbar(x, mean, yerr=error, color=color, linewidth=1.2, capsize=4, zorder=4)
+      ax.text(x, mean + error + pad, value_format.format(mean), ha="center", va="bottom", fontsize=9, color=color)
+      pair_top = max(pair_top, mean + error)
+    ax.add_patch(Rectangle(  # the change skills made: from the no-skills mean to the skills mean
+      (i + 0.2 - width / 2, min(without, with_skills)), width, abs(with_skills - without),
+      fill=False, edgecolor=color, linewidth=2.5, linestyle=(0, (3, 2)), zorder=3,
+    ))
+    if without:
+      ax.text(
+        i, pair_top + 5 * pad, f"{(with_skills - without) / without:+.0%}",
+        ha="center", va="bottom", fontsize=11, fontweight="bold", color=color,
+      )
+
+  label = COLUMN_LABELS.get(column, column.replace("_", " ").capitalize())
+  group_label = by if by != "benchmark" else "model"
+  ax.set_xticks(range(len(groups)))
+  ax.set_xticklabels(  # slanted, so long model ids never run into each other at any figure width
+    groups, fontsize=9, rotation=25, ha="right", rotation_mode="anchor",
+  )
+  ax.set_xlim(-0.6, len(groups) - 0.4)
+  ax.set_ylabel(label)
+  if column == "score":  # ticks stop at 1, the headroom above holds the change labels
+    ax.set_ylim(0, 1.15)
+    ax.set_yticks(np.arange(0, 1.01, 0.25))
+  else:
+    ax.set_ylim(0, top * 1.25)
+    ax.yaxis.set_major_formatter(COLUMN_TICK_FORMATS.get(column, lambda v, _: f"{v:,.0f}"))
+  ax.set_title(f"Mean {label[0].lower() + label[1:]} over all runs, per {group_label}", loc="left", pad=18)
+  ax.text(
+    0, 1.02, "error bars = standard error of the mean; % = relative change with skills",
+    transform=ax.transAxes, ha="left", va="bottom", fontsize=9, color="#52514e",
+  )
+  key = "#8a8984"
+  ax.legend(
+    handles=[
+      Patch(facecolor=key, edgecolor=key, label="No skills"),
+      Patch(fill=False, edgecolor=key, linewidth=2.5, linestyle=(0, (3, 2)), label="Skills"),
+    ],
+    frameon=False, loc="lower right", bbox_to_anchor=(1, 1.0), ncol=2,
+  )
+  style_bar_axis(ax)
+  return stats
 
 
 SUMMARY_METRICS = ("score", "duration_seconds", "total_tokens")
@@ -349,10 +586,12 @@ def plot_skill_summary(runs: pd.DataFrame, metrics=SUMMARY_METRICS, axs=None):
   return axs
 
 
-def compare_skills(runs: pd.DataFrame, metrics=SUMMARY_METRICS) -> pd.DataFrame:
+def compare_skills(runs: pd.DataFrame, metrics=SUMMARY_METRICS, aggregation: str = "task") -> pd.DataFrame:
+  runs, groups = ordered_groups(runs, aggregation)
   rows = []
   for metric in metrics:
-    for scope, data in [("all tasks (pooled)", runs)] + list(runs.groupby("task")):
+    per_group = [(group, runs[runs[aggregation] == group]) for group in groups]
+    for scope, data in [("all tasks (pooled)", runs)] + per_group:
       without = data.loc[~data["skills"], metric].astype(float)
       with_skills = data.loc[data["skills"], metric].astype(float)
       if np.ptp(np.concatenate([without, with_skills])) == 0:
@@ -368,7 +607,8 @@ def compare_skills(runs: pd.DataFrame, metrics=SUMMARY_METRICS) -> pd.DataFrame:
         }
       )
 
-    # paired alternative: one mean per task, so task difficulty cancels out
+    # paired alternative: one mean per task, so task difficulty cancels out; kept per task even
+    # when aggregating by task type, since finer pairs give the test more to work with
     task_means = runs.groupby(["task", "skills"])[metric].mean().unstack()
     _, p = wilcoxon(task_means[True], task_means[False])
     rows.append(
@@ -383,7 +623,7 @@ def compare_skills(runs: pd.DataFrame, metrics=SUMMARY_METRICS) -> pd.DataFrame:
   results = pd.DataFrame(rows)
   results["p_fdr"] = np.nan
   per_task = ~results["scope"].str.startswith("all tasks")
-  for metric in metrics:  # Benjamini-Hochberg within each metric's family of 7 per-task tests
+  for metric in metrics:  # Benjamini-Hochberg within each metric's family of per-group tests
     family = per_task & (results["metric"] == metric)
     results.loc[family, "p_fdr"] = false_discovery_control(results.loc[family, "p_value"], method="bh")
   results["significant_fdr"] = results["p_fdr"] < 0.05
