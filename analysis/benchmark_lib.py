@@ -21,7 +21,7 @@ from matplotlib import pyplot as plt
 from matplotlib.patches import Patch, Rectangle
 from matplotlib.path import Path as MplPath
 from matplotlib.ticker import MaxNLocator
-from scipy.stats import false_discovery_control, mannwhitneyu, wilcoxon
+from scipy.stats import false_discovery_control, levene, mannwhitneyu, wilcoxon
 
 BASE_DIR = Path.cwd()
 TEST_DIR = BASE_DIR.parent / "test"
@@ -231,6 +231,22 @@ def group_tick_labels(groups: list[str], aggregation: str) -> list[str]:
   return [f'{g.split("-")[0]}\n' + textwrap.fill(g.split("-", 1)[1], 12) for g in groups]
 
 
+MIN_WRAPPED_TICK_INCHES = 0.9  # a 12-character wrapped tick label at fontsize 9 needs about this much width
+
+
+def set_group_tick_labels(ax, groups: list[str], aggregation: str) -> None:
+  # wrapped labels while they fit; once the ticks get too close they would run into each other,
+  # so they go on one slanted line instead
+  inches_per_tick = ax.get_position().width * ax.figure.get_figwidth() / len(groups)
+  if inches_per_tick < MIN_WRAPPED_TICK_INCHES:
+    ax.set_xticklabels(
+      [" ".join(g.split("-", 1)) for g in groups] if aggregation != "task_type" else groups,
+      fontsize=9, rotation=40, ha="right", rotation_mode="anchor",
+    )
+  else:
+    ax.set_xticklabels(group_tick_labels(groups, aggregation), fontsize=9)
+
+
 def ordered_groups(runs: pd.DataFrame, aggregation: str) -> tuple[pd.DataFrame, list[str]]:
   # the groups to report per, in display order: task types follow the pipeline order,
   # anything else (tasks, or a task type not in TASK_TYPE_ORDER) sorts by name
@@ -314,7 +330,7 @@ def plot_benchmark(runs: pd.DataFrame, column: str, model_label: str, ax=None, p
 
   label = COLUMN_LABELS.get(column, column.replace("_", " ").capitalize())
   ax.set_xticks(range(len(tasks)))
-  ax.set_xticklabels(group_tick_labels(tasks, aggregation), fontsize=9)
+  set_group_tick_labels(ax, tasks, aggregation)
   ax.set_xlim(-0.6, len(tasks) - 0.4)
   ax.set_ylim(*ylim)
   if column == "score":
@@ -533,6 +549,176 @@ def plot_total_score(benchmarks: pd.DataFrame, by: str = "benchmark", column: st
   return stats
 
 
+KIT_COLORS = ("#1f5f8b", "#a0522d", "#5b3f9a", "#2e7d32", "#b03a2e", "#5d6d7e")  # tick labels, cycled
+NO_KIT = "unknown"
+KIT_ORDER = ("scirpy", "bcr-influenza", "liver", "psoriasis")  # plot_total_score_by_kit's rows, top to bottom
+CHANGE_BOX = dict(fill=False, linewidth=2.0, linestyle=(0, (3, 2)))
+
+
+def _change_pair_stats(benchmarks: pd.DataFrame, by: str, column: str, aggregation: str):
+  # per-(series, group) no-skills / skills mean and SEM, plus the series in slot order: by their
+  # overall skills mean, so the slots match plot_total_score
+  scaled = benchmarks[column] / COLUMN_SCALES.get(column, 1.0)
+  runs, keys = ordered_groups(benchmarks.assign(**{column: scaled}), aggregation)
+  stats = runs.groupby([by, aggregation, "skills"])[column].agg(["mean", "sem"]).unstack("skills")
+  groups = list(runs[runs["skills"]].groupby(by)[column].mean().sort_values(ascending=False).index)
+  styles = _series_styles(runs, by).set_index("label").loc[groups]
+  return runs, keys, stats, groups, styles
+
+
+def _draw_change_pairs(ax, stats: pd.DataFrame, groups: list, styles: pd.DataFrame, slots, pad: float) -> None:
+  # slots: (x center, key) pairs; each slot holds a no-skills / skills bar pair per series, a
+  # dashed box spanning the change, and the relative change above the pair
+  step = 0.84 / len(groups)
+  width = step * 0.42
+  for x0, key in slots:
+    for i, group in enumerate(groups):
+      if (group, key) not in stats.index:
+        continue  # this series never ran this group
+      color, hatch = styles.loc[group, "color"], styles.loc[group, "hatch"]
+      center = x0 - 0.42 + step * (i + 0.5)
+      without, with_skills = (stats.loc[(group, key), ("mean", s)] for s in (False, True))
+      pair_top = 0.0
+      for skills, mean in ((False, without), (True, with_skills)):
+        x = center + (1 if skills else -1) * width / 2
+        error = np.nan_to_num(stats.loc[(group, key), ("sem", skills)])
+        ax.bar(x, mean, width=width, color=color + "70", edgecolor=color, linewidth=1.0, hatch=hatch, zorder=2)
+        ax.errorbar(x, mean, yerr=error, color=color, linewidth=1.0, capsize=2, zorder=4)
+        pair_top = max(pair_top, mean + error)
+      ax.add_patch(Rectangle(
+        (center, min(without, with_skills)), width, abs(with_skills - without), edgecolor=color, zorder=3, **CHANGE_BOX,
+      ))
+      if without:
+        ax.text(
+          center, pair_top + pad, f"{(with_skills - without) / without:+.0%}",
+          ha="center", va="bottom", fontsize=7, fontweight="bold", color=color, rotation=90,
+        )
+
+
+def _change_pair_value_axis(ax, column: str, top: float) -> str:
+  label = COLUMN_LABELS.get(column, column.replace("_", " ").capitalize())
+  ax.set_ylabel(label)
+  if column == "score":
+    ax.set_ylim(0, 1.2)
+    ax.set_yticks(np.arange(0, 1.01, 0.25))
+  else:
+    ax.set_ylim(0, top * 1.3)
+    ax.yaxis.set_major_formatter(COLUMN_TICK_FORMATS.get(column, lambda v, _: f"{v:,.0f}"))
+  return label
+
+
+def _change_pair_legend_handles(groups: list, styles: pd.DataFrame) -> list:
+  key = "#8a8984"
+  return [
+    *(Patch(facecolor=styles.loc[g, "color"] + "70", edgecolor=styles.loc[g, "color"], hatch=styles.loc[g, "hatch"], label=g) for g in groups),
+    Patch(facecolor=key + "70", edgecolor=key, label="No skills (left bar)"),
+    Patch(edgecolor=key, label="Skills (right bar)", **CHANGE_BOX),
+  ]
+
+
+def plot_total_score_by_task_type(
+  benchmarks: pd.DataFrame, by: str = "benchmark", column: str = "score", ax=None, aggregation: str = "task_type",
+) -> pd.DataFrame:
+  # plot_total_score split by task type (or by task, with aggregation="task"): one group each,
+  # holding a no-skills / skills bar pair per model in a fixed slot (models ordered by their
+  # overall skills mean, so the slots match plot_total_score). Same dashed change box; the
+  # relative change sits above each pair, and per-bar values are left out since a group holds
+  # up to a dozen bars. Per task, the tick labels are colored by the task's dataset (kit)
+  runs, task_types, stats, groups, styles = _change_pair_stats(benchmarks, by, column, aggregation)
+  top = (stats["mean"] + stats["sem"].fillna(0)).max().max()
+  pad = 0.02 * (1.0 if column == "score" else top)
+  if ax is None:
+    _, ax = plt.subplots(figsize=(max(10, 0.9 * len(groups) * len(task_types)), 5.5))
+
+  _draw_change_pairs(ax, stats, groups, styles, enumerate(task_types), pad)
+  label = _change_pair_value_axis(ax, column, top)
+  ax.set_xticks(range(len(task_types)))
+  ax.set_xticklabels(group_tick_labels(task_types, aggregation), fontsize=9)
+  ax.set_xlim(-0.5, len(task_types) - 0.5)
+  for j in range(1, len(task_types)):
+    ax.axvline(j - 0.5, color="#e5e4e0", linewidth=0.8, zorder=1)
+  kit_handles = []
+  if aggregation == "task":
+    task_kits = runs.groupby("task")["kit"].first().fillna(NO_KIT)
+    kits = sorted(task_kits.unique(), key=lambda k: (k == NO_KIT, k))
+    kit_colors = {k: FALLBACK_COLOR if k == NO_KIT else KIT_COLORS[i % len(KIT_COLORS)] for i, k in enumerate(kits)}
+    for tick, task in zip(ax.get_xticklabels(), task_types):
+      tick.set_color(kit_colors[task_kits[task]])
+    kit_handles = [Patch(color=kit_colors[k], label=f"kit: {k}") for k in kits]
+  group_label = by if by != "benchmark" else "model"
+  ax.set_title(
+    f"Mean {label[0].lower() + label[1:]} per {aggregation.replace('_', ' ')}, per {group_label}", loc="left", pad=18,
+  )
+  ax.text(
+    0, 1.02, "error bars = standard error of the mean; % = relative change with skills",
+    transform=ax.transAxes, ha="left", va="bottom", fontsize=9, color="#52514e",
+  )
+  ax.legend(
+    handles=[*_change_pair_legend_handles(groups, styles), *kit_handles],
+    frameon=False, loc="upper left", bbox_to_anchor=(1.01, 1), fontsize=9,
+  )
+  style_bar_axis(ax)
+  return stats.reindex(pd.MultiIndex.from_product([groups, task_types])).dropna(how="all")
+
+
+def plot_total_score_by_kit(benchmarks: pd.DataFrame, by: str = "benchmark", column: str = "score", axs=None) -> pd.DataFrame:
+  # plot_total_score_by_task_type(aggregation="task") with one row per dataset (kit): each task
+  # sits in its task type's column, so reading down a column compares the same kind of task
+  # across datasets. A task type with several tasks in one kit (psoriasis has two
+  # complex-biological-effect tasks) gets that many slots in every row
+  runs, tasks, stats, groups, styles = _change_pair_stats(
+    benchmarks.assign(kit=benchmarks["kit"].fillna(NO_KIT)), by, column, "task",
+  )
+  runs, task_types = ordered_groups(runs, "task_type")
+  present = set(runs["kit"])  # kits outside KIT_ORDER follow by name, then tasks with no kit
+  kits = [k for k in KIT_ORDER if k in present] + sorted(present - set(KIT_ORDER), key=lambda k: (k == NO_KIT, k))
+  cells = runs.groupby(["kit", "task_type"])["task"].unique().map(sorted)
+  widths = [cells.xs(t, level="task_type").map(len).max() for t in task_types]
+  starts = np.concatenate([[0], np.cumsum(widths)])
+  top = (stats["mean"] + stats["sem"].fillna(0)).max().max()
+  pad = 0.02 * (1.0 if column == "score" else top)
+  if axs is None:
+    # no sharex: each row has its own task ticks, and a shared x axis shares the tick labels too
+    _, axs = plt.subplots(nrows=len(kits), figsize=(max(10, 0.9 * len(groups) * starts[-1]), 3.2 * len(kits)))
+  axs = np.ravel(axs)
+
+  for ax, kit in zip(axs, kits):
+    slots = []
+    for j, task_type in enumerate(task_types):
+      kit_tasks = cells.get((kit, task_type), [])
+      offset = starts[j] + (widths[j] - len(kit_tasks)) / 2  # center a lone task in a wide column
+      slots += [(offset + k + 0.5, task) for k, task in enumerate(kit_tasks)]
+    _draw_change_pairs(ax, stats, groups, styles, slots, pad)
+    label = _change_pair_value_axis(ax, column, top)
+    ax.set_ylabel(f"{kit}\n{label}")
+    ax.set_xticks([x for x, _ in slots])
+    ax.set_xticklabels([task.split("-")[0] for _, task in slots], fontsize=9)
+    ax.set_xlim(0, starts[-1])  # the same in every row, so the task type columns line up
+    for x in starts[1:-1]:
+      ax.axvline(x, color="#e5e4e0", linewidth=0.8, zorder=1)
+    style_bar_axis(ax)
+
+  header = axs[0].secondary_xaxis("top")
+  header.set_xticks((starts[:-1] + starts[1:]) / 2)
+  header.set_xticklabels(group_tick_labels(task_types, "task_type"), fontsize=9)
+  header.tick_params(length=0)
+  header.spines["top"].set_visible(False)
+  group_label = by if by != "benchmark" else "model"
+  axs[0].set_title(
+    f"Mean {label[0].lower() + label[1:]} per task, per dataset and {group_label}", loc="left", pad=64,
+  )
+  axs[0].annotate(
+    "columns = task type, tick = task number; error bars = standard error of the mean; % = relative change with skills",
+    xy=(0, 1), xycoords="axes fraction", xytext=(0, 50), textcoords="offset points",
+    ha="left", va="bottom", fontsize=9, color="#52514e",
+  )
+  axs[0].legend(
+    handles=_change_pair_legend_handles(groups, styles),
+    frameon=False, loc="upper left", bbox_to_anchor=(1.01, 1), fontsize=9,
+  )
+  return stats.reindex(pd.MultiIndex.from_product([groups, tasks])).dropna(how="all")
+
+
 SUMMARY_METRICS = ("score", "duration_seconds", "total_tokens")
 VALUE_FORMATS = {"score": "{:.3f}", "duration_seconds": "{:,.0f}", "total_tokens": "{:.2f}"}
 
@@ -630,6 +816,39 @@ def compare_skills(runs: pd.DataFrame, metrics=SUMMARY_METRICS, aggregation: str
   return results
 
 
+def compare_spread(runs: pd.DataFrame, column: str = "score") -> tuple[pd.DataFrame, pd.DataFrame]:
+  # whether skills make a model more consistent: the per-task std of each arm, with a
+  # Brown-Forsythe test (Levene around the median, robust to the skewed 0-1 scores) per task,
+  # BH-corrected, and a Wilcoxon signed-rank over tasks on the paired stds. With 5 runs per arm
+  # the per-task tests have little power, so the paired test is the one to read
+  rows = []
+  for task, data in runs.groupby("task"):
+    without = data.loc[~data["skills"], column].astype(float)
+    with_skills = data.loc[data["skills"], column].astype(float)
+    if without.std() == 0 and with_skills.std() == 0:
+      p = 1.0  # both arms constant: the test statistic is undefined, and there is no difference
+    else:
+      _, p = levene(with_skills, without, center="median")
+    rows.append({
+      "task": task, "n": f"{len(without)} vs {len(with_skills)}",
+      "std_no_skills": without.std(), "std_skills": with_skills.std(),
+      "diff": with_skills.std() - without.std(), "p_value": p,
+    })
+  per_task = pd.DataFrame(rows)
+  per_task["p_fdr"] = false_discovery_control(per_task["p_value"], method="bh")
+  per_task["significant_fdr"] = per_task["p_fdr"] < 0.05
+
+  diff = per_task["diff"]
+  _, p = wilcoxon(per_task["std_skills"], per_task["std_no_skills"])  # zero diffs are dropped
+  paired = pd.DataFrame([{
+    "test": "Wilcoxon signed-rank (paired by task)", "n": f"{len(per_task)} tasks",
+    "mean_std_no_skills": per_task["std_no_skills"].mean(), "mean_std_skills": per_task["std_skills"].mean(),
+    "lower_with_skills": int((diff < 0).sum()), "higher_with_skills": int((diff > 0).sum()),
+    "tied": int((diff == 0).sum()), "p_value": p,
+  }])
+  return per_task, paired
+
+
 def metric_table(significance: pd.DataFrame, metric: str) -> pd.DataFrame:
   return significance[significance["metric"] == metric].drop(columns="metric").reset_index(drop=True)
 
@@ -667,9 +886,7 @@ def plot_timeouts(runs: pd.DataFrame, model_label: str, axs=None):
     total_ax.text(x, total + 0.4, f"{total}/{n_runs}", ha="center", va="bottom", fontsize=9, color="#52514e")
 
   task_ax.set_xticks(range(len(tasks)))
-  task_ax.set_xticklabels(
-    [f'{t.split("-")[0]}\n' + textwrap.fill(t.split("-", 1)[1], 12) for t in tasks], fontsize=9
-  )
+  set_group_tick_labels(task_ax, tasks, "task")
   task_ax.set_xlim(-0.6, len(tasks) - 0.4)
   task_ax.set_ylim(0, max(by_task.max(), 1) * 1.3)
   task_ax.yaxis.set_major_locator(MaxNLocator(integer=True))
