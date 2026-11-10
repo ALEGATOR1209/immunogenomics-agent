@@ -167,7 +167,7 @@
         "et3_mean_modularity": 1.169,
         "top_modularity_score": 7.0438664705576715,
         "top_pval": 2.4441719293223418e-36,
-        "top_expression_FGFBP2": "less",
+        "top_expression_FGFBP2": "more",
         "n_tumor_differential_clonotypes": 2
       },
       "tolerances": {
@@ -193,5 +193,5 @@
     "kit": "scirpy",
     "task": "clonotype-clustering"
   },
-  "task": "There is 10x-genomics single cell CellRanger data with RNA-seq (feature bc matrix) and TCR-seq (contig annotations) data for blood (*B samples), tumor (*T samples) and normal tumor-adjascent tissue (*N samples) for different patients. Load the data, perform quality control as necessary and integrate the samples. Use only TCR data, with from one to two functional pairs of chains. Define clonotypes and clonotype networks (min_cells = 3) based on sequence and amino-acid similarity. Calculate clonotype modularity. What is the mean (per cell) modularity of the ET3 sample? From all the samples and calculated clonotypes, take only those that belong to the blood tissue. Take top 1 clonotype with the highest modularity score. What the score and the FDR-adjusted p-value are? Is gene FGFBP2 more or less expressed in the most modular clonotype compared to the rest of the cells? (\"more\" or \"less\"). Calculate clonotype imbalance between normal cells and tumor cells. Take top 3 differential clonotypes. How many of them correspond (on cellular level) primarily to tumor tissues?"
+  "task": "There is 10x-genomics single cell CellRanger data with RNA-seq and TCR-seq (contig annotations) data for blood (*B samples), tumor (*T samples) and normal tumor-adjacent tissue (*N samples) for different patients. Load the data, perform quality control. Combine all samples and keep only cells present in both the RNA-seq and TCR-seq data. Apply normalization, HVG selection (5000), PCA and neighbourhood graph (n=15) to RNA data. Keep only alpha/beta T cells with at least one productive alpha and one productive beta chain and at most two of each. Define clonotypes by nucleotide sequence identity of both chains, using only the primary receptor chains for cells with more than one alpha or beta chain. Define clonotype clusters by CDR3 amino-acid similarity (TCRdist <= 15 on both chains; a cell with two receptor pairs joins a cluster if either pair matches). Calculate clonotype modularity of the clonotype clusters on the neighbour graph. What is the mean per-cell modularity of the ET3 sample? Among cells from blood samples, which clonotype cluster has the highest modularity: what are its modularity score and FDR-adjusted p-value? Is gene FGFBP2 more or less expressed in that cluster than in all other cells (\"more\" or \"less\")? Test clonotype imbalance between tumor (case) and normal (control) cells using nucleotide clonotypes, with samples as replicates, and take the 3 with the lowest p-value. How many of them correspond (on cellular level) primarily to tumor tissues?"
 }

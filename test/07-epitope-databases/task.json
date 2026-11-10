@@ -166,7 +166,7 @@
       "ground_truth": {
         "top_antigen_species_normal": "Severe acute respiratory syndrome coronavirus 2",
         "top_antigen_species_tumor": ["Homo sapiens", "Cytomegalovirus"],
-        "n_blood_antigens": 8
+        "n_blood_antigens": 7
       },
       "tolerances": {
         "top_antigen_species_tumor": {
@@ -186,5 +186,5 @@
     "kit": "scirpy",
     "task": "epitope-databases"
   },
-  "task": "There is 10x-genomics single cell CellRanger data with RNA-seq (feature bc matrix) and TCR-seq (contig annotations) data for blood (*B samples), tumor (*T samples) and normal tumor-adjascent tissue (*N samples) for different patients. Load the data, perform quality control as necessary and integrate the samples. Use only TCR data, with from one to two functional pairs of chains. Define clonotypes and clonotype networks (min_cells = 3) based on sequence and amino-acid similarity. Using iggytop, perform antigen species enrichment. Find the most abundant antigen species among the normal tissue cells. List the two most abundant antigen species among the tumor cells, excluding any \"ambiguous\" annotation as well as the antigen previously found in normal tissue (order does not matter). Find the amount of antigen species in blood tissue present in more than 5 cells."
+  "task": "There is 10x-genomics single cell CellRanger data with RNA-seq and TCR-seq (contig annotations) data for blood (*B samples), tumor (*T samples) and normal tumor-adjacent tissue (*N samples) for different patients. Load the data, perform quality control. Combine all samples and keep only cells present in both the RNA-seq and TCR-seq data. Keep only alpha/beta T cells with at least one productive alpha and one productive beta chain and at most two of each. Annotate each cell with the IggyTop epitope database (scirpy ir.datasets.iggytop()): match by identical CDR3 amino-acid sequence, where a match on either the alpha or the beta chain, in either receptor pair, counts. When a cell matches several entries, assign the most frequent antigen species; label ties \"ambiguous\". Which antigen species is most common (by number of cells) in normal tissue? Excluding \"ambiguous\" and that species, which two antigen species are most common in tumor tissue (order does not matter)? Excluding \"ambiguous\", how many antigen species are assigned to more than 5 blood cells?"
 }
