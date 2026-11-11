@@ -126,8 +126,8 @@
       "ground_truth": {
         "cluster_by": "patient",
         "shared_post_vaccination_09": 32,
-        "correlation_value": -0.866685621272155,
-        "patient_09_correlation": "negative"
+        "correlation_value": 0.5385230380640786,
+        "patient_09_correlation": "positive"
       },
       "tolerances": {
         "shared_post_vaccination_09": {
@@ -148,5 +148,5 @@
     "kit": "bcr-influenza",
     "task": "repertoire-similarity"
   },
-  "task": "There is RNA-seq 10X Cell Ranger data and BCR-seq data from 6 patients (use filtered contig annotations). You can find metadata related to the patients in the metadata.csv file. For each patient, two measurements was taken: one before influenza vaccination (e.g. 09-0) and the other 7 days after the vaccination (e.g. 09-7). Load the data, perform preprocessing and quality control. Keep only cells with single BCR chain pair. Keep only cells for which both BCR and RNA-seq data exist. Define clonotypes. Compute the Jaccard distance matrix between samples and use it to determine whether samples cluster together primarily by patient identity (write \"patient\") or by condition (post-vaccination vs pre-vaccination, write \"condition\"). How many clonotypes are shared between patient 09 samples from pre-vaccination and post-vaccination? Write the Pearson correlation of clonotype sizes between pre-vaccination and post-vaccination across all samples. In the patient 09, do we see a positive or negative correlation of clonotype sizes between pre-vaccination and post-vaccination samples? Write \"positive\" or \"negative\"."
+  "task": "There is RNA-seq 10X Cell Ranger data and BCR-seq data from 6 patients (use filtered contig annotations). You can find metadata related to the patients in the metadata.csv file. For each patient, two measurements were taken: one before influenza vaccination (e.g. 09-0) and the other 7 days after the vaccination (e.g. 09-7). Load the data, perform preprocessing and quality control. Remove cells with mitochondrial RNA content of 15% or more. Keep only cells with exactly one productive heavy chain and one productive light chain, and only cells for which both BCR and RNA-seq data exist. Define clonotypes by nucleotide sequence identity of both chains, across all samples. Compute the Jaccard distance matrix between samples and use it to determine whether samples cluster together primarily by patient identity (write \"patient\") or by condition (post-vaccination vs pre-vaccination, write \"condition\"). How many clonotypes are shared between patient 09 samples from pre-vaccination and post-vaccination? Among clonotypes present both before and after vaccination, compute the Pearson correlation of their cell counts between the two timepoints (pooling all patients) (correlation_value). In patient 09, is this correlation positive or negative? Write \"positive\" or \"negative\"."
 }

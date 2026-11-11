@@ -46,10 +46,14 @@
       "ground_truth": {
         "cell_type_IGKV4_1": "Age-associated B cells",
         "patient_different_cell_type_IGKV4_1": "09",
-        "plasmablasts_vdj_junction_length": 17.0,
+        "plasmablasts_vdj_junction_length": 16.891666666666666,
         "j6_more_expressed_in_cell_type": "Plasma cells"
       },
       "tolerances": {
+        "plasmablasts_vdj_junction_length": {
+          "type": "absolute",
+          "value": 0.5
+        }
       }
     },
     "type": "numeric_tolerance"
@@ -60,5 +64,5 @@
     "kit": "bcr-influenza",
     "task": "gene-usage"
   },
-  "task": "There is RNA-seq 10X Cell Ranger data and BCR-seq data from 2 patients (use filtered contig annotations). You can find metadata related to the patients in the metadata.csv file. For each patient, two measurements was taken: one before influenza vaccination (e.g. 09-0) and the other 7 days after the vaccination (e.g. 09-7). Load the data, perform preprocessing and quality control. Keep only cells whose BCR consists of exactly one productive chain pair. Keep only cells for which both BCR and RNA-seq data exist. Annotate cell types using cell_type.py script. Across all pre-vaccination samples, which cell type expresses IGKV4-1 the most (not counting for Naive B cells)? Will this hold if splitting pre-vaccination data per-patient? Output patient id in which it doesn't hold or '-' if it holds. What's mean heavy chain junction sequence length for plasmablasts? In what cell type (across all samples) is J6 gene expressed more: Memory B cells or Plasma cells?"
+  "task": "There is RNA-seq 10X Cell Ranger data and BCR-seq data from 2 patients (use filtered contig annotations). You can find metadata related to the patients in the metadata.csv file. For each patient, two measurements were taken: one before influenza vaccination (e.g. 09-0) and the other 7 days after the vaccination (e.g. 09-7). Load the data, perform preprocessing and quality control. Remove cells with mitochondrial RNA content of 15% or more. Keep only cells with exactly one productive heavy chain and one productive light chain, and only cells for which both BCR and RNA-seq data exist. Annotate cell types using cell_type.py script. Across all pre-vaccination samples, among cells whose light chain uses IGKV4-1, which cell type is most common, not counting Naive B cells? Does this hold in each pre-vaccination sample separately? Output patient id in which it doesn't hold or '-' if it holds. What is the mean length, in amino acids, of the heavy-chain junction (including the conserved C and W) in plasmablasts across all samples? Which cell type has a higher fraction of cells whose heavy chain uses IGHJ6: Memory B cells or Plasma cells (across all samples)?"
 }

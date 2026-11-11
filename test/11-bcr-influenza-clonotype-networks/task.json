@@ -52,8 +52,8 @@
           "Plasma cells",
           "Memory B cells"
         ],
-        "convergence_change_patient": "09",
-        "convergent_clonotype_change_rate": 4.7224564723211175
+        "cluster_change_patient": "09",
+        "cluster_fraction_ratio": 1.7356041372084179
       },
       "tolerances": {
         "expanded_cell_types": {
@@ -64,7 +64,7 @@
         },
         "convergent_clonotype_change_rate": {
           "type": "absolute",
-          "value": 1.5
+          "value": 0.5
         }
       }
     },
@@ -76,5 +76,5 @@
     "kit": "bcr-influenza",
     "task": "clonotype-networks"
   },
-  "task": "There is RNA-seq 10X Cell Ranger data and BCR-seq data from 2 patients (use filtered contig annotations). You can find metadata related to the patients in the metadata.csv file. For each patient, two measurements was taken: one before influenza vaccination (e.g. 09-0) and the other 7 days after the vaccination (e.g. 09-7). Load the data, perform preprocessing and quality control. Keep only cells whose BCR consists of exactly one productive chain pair. Keep only cells for which both BCR and RNA-seq data exist. Annotate cell types using cell_type.py script. Define clonotypes and perform expansion analysis. Which cell 2 types expanded the most in the young patient 7 days after vaccination? In that same patient before vaccination, what cell types compose the two largest clones? Analyze convergent clonotypes. Which patient displays the bigger convergence change before and after vaccination (output patient id)? For that patient, output convergence change rate."
+  "task": "There is RNA-seq 10X Cell Ranger data and BCR-seq data from 2 patients (use filtered contig annotations). You can find metadata related to the patients in the metadata.csv file. For each patient, two measurements were taken: one before influenza vaccination (e.g. 09-0) and the other 7 days after the vaccination (e.g. 09-7). Load the data, perform preprocessing and quality control. Remove cells with mitochondrial RNA content of 15% or more. Keep only cells with exactly one productive heavy chain and one productive light chain, and only cells for which both BCR and RNA-seq data exist. Annotate cell types using cell_type.py script. Analyse each sample separately: define clonotypes by nucleotide sequence identity of both chains, and call a clonotype expanded if it has 2 or more cells. Which two cell types have the highest fraction of their cells in expanded clonotypes in the young patient 7 days after vaccination? In that same patient before vaccination, list all cell types present in the two largest clonotypes. Within each sample, group clonotypes into clusters whose heavy- and light-chain CDR3 amino-acid sequences each differ by a Levenshtein distance of at most 3, and compute the fraction of cells whose cluster contains two or more distinct nucleotide clonotypes. Which patient shows the larger fold change in this fraction from before to after vaccination (output patient id)? For that patient, output the ratio of the post-vaccination to the pre-vaccination fraction."
 }

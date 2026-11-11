@@ -44,11 +44,10 @@
   "grader": {
     "config": {
       "ground_truth": {
-        "mean_modularity_09_7": 0.22868042526625632,
-        "delta_mean_modularity_09": 0.19109125432410423,
+        "mean_modularity_09_7": 0.3797549577391556,
+        "delta_mean_modularity_09": 0.27208184433270494,
         "best_hypothesis": 2,
         "overexpressed_genes": [
-          "IGKC",
           "IGHM"
         ]
       },
@@ -74,5 +73,5 @@
     "kit": "bcr-influenza",
     "task": "clonotype-clustering"
   },
-  "task": "There is RNA-seq 10X Cell Ranger data and BCR-seq data from 2 patients (use filtered contig annotations). You can find metadata related to the patients in the metadata.csv file. For each patient, two measurements was taken: one before influenza vaccination (e.g. 09-0) and the other 7 days after the vaccination (e.g. 09-7). Load the data, perform preprocessing and quality control. Keep only cells with single BCR chain pair. Keep only cells for which both BCR and RNA-seq data exist. Perform PCA and nearest neighbour detection. Annotate cell types using cell_type.py script. Define clonotypes and clonotype networks (min_cells = 3) based on sequence and amino-acid similarity. Calculate clonotype modularity by amino-acid similarity clusters. What is the mean (per cell) modularity of the 09-7 sample? How does the mean modularity of patient 09 change after vaccination? (output delta of mean modularity after vaccination minus mean modularity before vaccination). Which hypothesis has the best support from the data? (1) BCR clonotype modularity increases after vaccination, (2) BCR repertoire reaction on vaccination is more pronounced in younger patients than in the older ones, (3) The top 5 highest modularity clonotypes (across all samples) are all mostly localized to Memory B cells. Output the number of the hypothesis. In sample 09-0, look at 3 most modular clonotypes. Which of these genes (look only at 15 most differentially expressed genes, Wilcoxon) is overexpressed in at least 2 of the 3, compared to the rest of the cells: IGKC, IGKV1-8, IGHM."
+  "task": "There is RNA-seq 10X Cell Ranger data and BCR-seq data from 2 patients (use filtered contig annotations). You can find metadata related to the patients in the metadata.csv file. For each patient, two measurements were taken: one before influenza vaccination (e.g. 09-0) and the other 7 days after the vaccination (e.g. 09-7). Load the data, perform preprocessing and quality control. Remove cells with mitochondrial RNA content of 15% or more. Keep only cells with exactly one productive heavy chain and one productive light chain, and only cells for which both BCR and RNA-seq data exist. Normalize counts to 10,000 per cell, log-transform, select 5000 highly variable genes (Cell Ranger method), run PCA and build a 15-nearest-neighbour graph. Annotate cell types using cell_type.py script. Across all samples, define clonotypes by nucleotide sequence identity of both chains, and group clonotypes into clusters whose heavy- and light-chain CDR3 amino-acid sequences each differ by a Levenshtein distance of at most 3. Calculate the clonotype modularity of these clusters on the knn graph. What is the mean per-cell modularity of the sample 09-7? How does the mean modularity of patient 09 change after vaccination (output mean after minus mean before)? Which hypothesis has the best support from the data? (1) BCR clonotype modularity increases after vaccination, (2) BCR repertoire reaction on vaccination is more pronounced in younger patients than in the older ones, (3) The top 5 highest modularity clusters (across all samples) are all mostly localized to Memory B cells. Output the number of the hypothesis. In sample 09-0, take the 3 most modular clusters and, for each, the 15 genes most differentially expressed against all other cells in that sample (Wilcoxon). Which of IGKC, IGKV1-8 and IGHM are overexpressed in at least 2 of the 3?"
 }

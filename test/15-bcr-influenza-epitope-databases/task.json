@@ -48,7 +48,7 @@
         "top_antigen_names": [
           "hemagglutinin",
           "neuraminidase",
-          "H1 HA1/HA2"
+          "hemagglutinin precursor"
         ]
       },
       "tolerances": {
@@ -65,5 +65,5 @@
     "kit": "bcr-influenza",
     "task": "epitope-databases"
   },
-  "task": "There is RNA-seq 10X Cell Ranger data and BCR-seq data from 2 patients (use filtered contig annotations). You can find metadata related to the patients in the metadata.csv file. For each patient, two measurements was taken: one before influenza vaccination (e.g. 09-0) and the other 7 days after the vaccination (e.g. 09-7). Load the data, perform preprocessing and quality control. Keep only cells with single BCR chain pair. Keep only cells for which both BCR and RNA-seq data exist. Annotate cell types using cell_type.py script. Using iggytop, perform antigen species enrichment. Find the most abundant antigen species across all samples (ignore ambiguous). For Influenza A virus, across all samples, what are the 3 most common targets (antigen name)?"
+  "task": "There is RNA-seq 10X Cell Ranger data and BCR-seq data from 2 patients (use filtered contig annotations). You can find metadata related to the patients in the metadata.csv file. For each patient, two measurements were taken: one before influenza vaccination (e.g. 09-0) and the other 7 days after the vaccination (e.g. 09-7). Load the data, perform preprocessing and quality control. Keep only cells with exactly one productive heavy chain and one productive light chain, and only cells for which both BCR and RNA-seq data exist. Annotate each cell with the IggyTop database. Match by identical CDR3 amino-acid sequence, where a match on either the heavy or the light chain counts. When a cell matches several entries, assign the most frequent antigen species; label ties \"ambiguous\". Excluding \"ambiguous\", which antigen species is assigned to the most cells across all samples? Then count all database matches to Influenza A virus entries across all samples. Which 3 antigen names are matched most often?"
 }
