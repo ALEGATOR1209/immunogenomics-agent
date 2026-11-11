@@ -22,7 +22,7 @@
         "more_expanded": "LN5",
         "more_between_2_5": "LN5",
         "ln5_alpha_diversity": 0.894,
-        "convergent_clonotypes": 202
+        "n_clustered_clonotypes": 202
       },
       "tolerances": {
         "cells_multiple_tcr": {
@@ -45,7 +45,7 @@
           "type": "absolute",
           "value": 0.05
         },
-        "convergent_clonotypes": {
+        "n_clustered_clonotypes": {
           "type": "absolute",
           "value": 20
         }
@@ -59,5 +59,5 @@
     "kit": "scirpy",
     "task": "clonotype-networks"
   },
-  "task": "There is a 10x-genomics single cell CellRanger data with RNA-seq and TCR-seq (contig annotations) data. There are two samples, LT5 and LN5. Use only TCR data in this task. Find the fraction of cells with more than one alpha chain or more than one beta chain (cells_multiple_tcr). Filter out cells that have only a productive alpha or only a productive beta chain, and cells with more than two productive alpha or more than two productive beta chains. Among the remaining cells, how many have exactly one productive alpha and one productive beta chain? How many have no productive TCR chain at all? Define clonotypes based on nucleotide sequence identity. For cells with more than one alpha or beta chain, use only the primary chains. Define clonotype clusters by CDR3 amino-acid similarity: group cells whose alpha and beta CDR3s are within a TCRdist of 15; a cell with two receptor pairs joins a cluster if either pair matches. How many cells are in the largest clonotype cluster? Perform clonal expansion analysis, grouping clonotypes by size with breakpoints 1, 2 and 5 cells. In which sample (LT5 or LN5) are there more clonotypes? In which sample are there relatively more expanded clonotypes? In which sample there are more clonotypes with the number of cells between 2 and 5? Calculate alpha-diversity (normalized Shannon entropy of clonotype sizes) for LN5 sample. A clonotype cluster is convergent if it contains two or more distinct nucleotide clonotypes. How many nucleotide clonotypes belong to a convergent cluster?"
+  "task": "There is a 10x-genomics single cell CellRanger data with RNA-seq and TCR-seq (contig annotations) data. There are two samples, LT5 and LN5. Use only TCR data in this task. Among cells with TCR data, what fraction have more than one productive alpha chain or more than one productive beta chain (cells_multiple_tcr)? How many have exactly one productive alpha and one productive beta chain? How many have no productive TCR chain at all? Then filter out cells with no productive chain, cells that have only a productive alpha or only a productive beta chain, and cells with more than two productive alpha or more than two productive beta chains. Define clonotypes based on nucleotide sequence identity. For cells with more than one alpha or beta chain, use only the primary chains. Define clonotype clusters by CDR3 amino-acid similarity: group cells whose alpha and beta CDR3s are within a TCRdist of 15; a cell with two receptor pairs joins a cluster if either pair matches. How many cells are in the largest clonotype cluster? Perform clonal expansion analysis, grouping clonotypes by size with breakpoints 1, 2 and 5 cells. In which sample (LT5 or LN5) are there more clonotypes? In which sample are there relatively more expanded clonotypes? In which sample there are more clonotypes with the number of cells between 2 and 5? Calculate alpha-diversity (normalized Shannon entropy of clonotype sizes) for LN5 sample. How many nucleotide clonotypes belong to a clonotype cluster that contains two or more distinct nucleotide clonotypes (n_clustered_clonotypes)?"
 }
