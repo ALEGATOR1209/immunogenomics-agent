@@ -101,7 +101,7 @@
         "max_clonotype_tcr": 31,
         "n_clonotypes_bcr": 1998,
         "max_clonotype_bcr": 115
-            },
+      },
       "tolerances": {
         "n_cells_after_qc": {
           "type": "absolute",
@@ -141,5 +141,5 @@
     "kit": "liver",
     "task": "clonotype-analysis"
   },
-  "task": "There's liver transplantation data. There are four types of statuses (Pre-TXP - before transplantation, No-ACR - no rejection, Late-ACR - rejection, resolved - rejection treated successfully). Some patients were sampled (biopsy) several times at different time points (e.g. BX-1, BX-2, BX-3). For each sample, RNA-seq, TCR-seq and BCR-seq information is available. Load the data, perform preprocessing and quality control. Use 10% threshold for mitochondrial genes. Keep BCRs and TCRs that consist of exactly one productive chain pair. Output the remaining number of cells, TCRs, BCRs, after filtering. Define clonotypes for both TCRs and BCRs. Find the total number of identified clonotypes per receptor type. Find the size of the largest clonotype per receptor type."
+  "task": "There's liver transplantation data. There are four types of statuses (Pre-TXP - before transplantation, No-ACR - no rejection, Late-ACR - rejection, resolved - rejection treated successfully). Biopsies were obtained from the same patients several times over time (e.g. BX-1, BX-2, BX-3). For each sample, RNA-seq, TCR-seq and BCR-seq information is available. Load the data, perform preprocessing and quality control. Use a 10% threshold for mitochondrial genes. Filter the RNA-seq, TCR and BCR data independently; do not remove TCR or BCR cells based on RNA-seq quality control. Keep only TCR cells with exactly one productive alpha and one productive beta chain, and BCR cells with exactly one productive heavy and one productive light chain. Output the remaining number of RNA-seq cells, TCR cells and BCR cells after filtering. Define clonotypes for both TCRs and BCRs, by nucleotide sequence identity of both chains across all samples. Find the total number of identified clonotypes per receptor type. Find the size of the dominant clonotype per receptor type."
 }

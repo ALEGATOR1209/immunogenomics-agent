@@ -109,5 +109,5 @@
     "kit": "liver",
     "task": "gene-usage"
   },
-  "task": "There's liver transplantation data. There are four types of statuses (Pre-TXP - before transplantation, No-ACR - no rejection, Late-ACR - rejection, resolved - rejection treated successfully). Some patients were sampled (biopsy) several times at different time points (e.g. BX-1, BX-2, BX-3). For each sample, RNA-seq, TCR-seq and BCR-seq information is available. Use TCR data for the downstream analysis. Which of beta-chain diversity genes is more prevalent in patient 12? Look at patient 6. Their pre-transplantation repertoire is mainly characterized by one alpha-region gene and one joining region gene. Name these genes."
+  "task": "There's liver transplantation data. There are four types of statuses (Pre-TXP - before transplantation, No-ACR - no rejection, Late-ACR - rejection, resolved - rejection treated successfully). Biopsies were obtained from the same patients several times over time (e.g. BX-1, BX-2, BX-3). For each sample, RNA-seq, TCR-seq and BCR-seq information is available. Use TCR data for the downstream analysis. Which beta-chain diversity gene is more prevalent in patient 12? Look at patient 6. Their pre-transplantation repertoire is mainly characterized by one alpha-chain V gene and one alpha-chain J gene. Name these genes."
 }

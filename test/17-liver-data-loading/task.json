@@ -110,5 +110,5 @@
     "kit": "liver",
     "task": "data-loading"
   },
-  "task": "There's liver transplantation data. There are four types of statuses (Pre-TXP - before transplantation, No-ACR - no rejection, Late-ACR - rejection, resolved - rejection treated successfully). Some patients were sampled (biopsy) several times at different time points (e.g. BX-1, BX-2, BX-3). For each sample, RNA-seq, TCR-seq and BCR-seq information is available. How many cells are available with transcriptomic data? How many TCRs and BCRs are available? How many TCRs correspond to Late-ACR?"
+  "task": "There's liver transplantation data. There are four types of statuses (Pre-TXP - before transplantation, No-ACR - no rejection, Late-ACR - rejection, resolved - rejection treated successfully). Biopsies were obtained from the same patients several times over time (e.g. BX-1, BX-2, BX-3). For each sample, RNA-seq, TCR-seq and BCR-seq information is available. How many cell barcodes are in the RNA-seq data? How many cells have TCR data, and how many have BCR data (use the filtered contig annotations)? How many cells with TCR data come from Late-ACR samples?"
 }
