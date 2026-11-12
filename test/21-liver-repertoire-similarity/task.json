@@ -97,7 +97,7 @@
         "primary_clustering_variable": "patient",
         "patient_12_late-acr-resolved-corr": 0.20444989314716355,
         "patient_12_late-acr-last-resolved-corr": 0.04077679838483509,
-        "patient_12_immune_response_decrease": "True"
+        "last_late_acr_closer_to_first_resolved": "True"
       },
       "tolerances": {
         "patient_12_late-acr-resolved-corr": {
@@ -118,5 +118,5 @@
     "kit": "liver",
     "task": "repertoire-similarity"
   },
-  "task": "There's liver transplantation data. There are four types of statuses (Pre-TXP - before transplantation, No-ACR - no rejection, Late-ACR - rejection, resolved - rejection treated successfully). Some patients were sampled (biopsy) several times at different time points (e.g. BX-1, BX-2, BX-3). For each sample, RNA-seq, TCR-seq and BCR-seq information is available. Use only TCR data for downstream analyzis. Compute a Jaccard distance matrix of repertoire overlap. Which variable influences similarity of repertoires more: patient or clinical status? Output \"patient\" or \"status\". Look at patient 12. Calculate Pearson correlations matrix for clonotype sizes between different biopsies. What is the correlation between the last Late-ACR and the first Resolved biopsy? What is the correlation between the last Late-ACR and the last Resolved? Can we talk about the decrease of the immune response based rejection taking into account solely the correlation table? Output \"True\" or \"False\"."
+  "task": "There's liver transplantation data. There are four types of statuses (Pre-TXP - before transplantation, No-ACR - no rejection, Late-ACR - rejection, resolved - rejection treated successfully). Biopsies were obtained from the same patients several times over time (e.g. BX-1, BX-2, BX-3). For each sample, RNA-seq, TCR-seq and BCR-seq information is available. Use only TCR data for downstream analysis. Keep only cells with exactly one productive alpha and one productive beta chain. Define clonotypes by nucleotide sequence identity of both chains across all samples. Compute a Jaccard distance matrix of repertoire overlap between samples. Which variable influences similarity of repertoires more: patient or clinical status? Output \"patient\" or \"status\". Look at patient 12. For each pair of biopsies, compute the Pearson correlation of clonotype sizes (number of cells) over all clonotypes found in patient 12, counting a clonotype as 0 in biopsies where it is absent. What is the correlation between the last Late-ACR and the first Resolved biopsy? What is the correlation between the last Late-ACR and the last Resolved? Does the last Late-ACR repertoire resemble the first Resolved biopsy more than the last Resolved biopsy? Output \"True\" or \"False\"."
 }
