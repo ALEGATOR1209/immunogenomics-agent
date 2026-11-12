@@ -1,0 +1,8 @@
+annotation,label,CD8a,CD103,CD49a,CCR6,CD161
+t_cell_type,CD8,+,,,,
+t_cell_type,CD4,-,,,,
+residency,CD103+ Trm,,+,,,
+residency,CD49a+ Trm,,-,+,,
+residency,non-Trm,,-,-,,
+type17,type 17,,,,+,+
+type17,non-type 17,,,,,

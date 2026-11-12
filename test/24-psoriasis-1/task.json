@@ -20,7 +20,10 @@
         "theory_1_correlation": 0.5386632259480197,
         "theory_2_decision": "False",
         "theory_2_output": 61,
-        "skin_associated_clonotypes_cell_type": "Regulatory T cells"
+        "skin_associated_clonotypes_cell_type": "CD103+ Trm",
+        "highest_clonal_sharing_type": "CD8+",
+        "highest_clonal_sharing_fraction": 0.16010163976775815,
+        "largest_triple_shared_clone_patient": "4"
       },
       "tolerances": {
         "theory_1_correlation": {
@@ -30,6 +33,10 @@
         "theory_2_output": {
           "type": "absolute",
           "value": 6
+        },
+        "highest_clonal_sharing_fraction": {
+          "type": "absolute",
+          "value": 0.06
         }
       }
     },
@@ -41,5 +48,5 @@
     "kit": "psoriasis",
     "task": "complex-biological-effect"
   },
-  "task": "There is a RNA-seq + TCR-seq data from 5 psoriatic arthritis (PsA) patients. Samples 3a and 3b are the replicates of patient 3. You need to only use 3a for the downstream analysis. Load the data and perform cell type annotation. Use scripts loading.py and cell_type.py for that. Theory 1: immune repertoire is shared between synovial fluid and synovial tissue. Is this supported by data? Output \"True\" or \"False\". If the theory is true, output also pearson correlation of clonotypes between these two tissue types (pooled from all samples). Else, output -1. Theory 2: the biggest clonotype is characterized primarily by blood tissue, followed by clonotypes dominated by skin tissue and then clonotypes with synovial flyid/tissue. Is this supported by data? Output \"True\" or \"False\". If the theory is true, output the size of the largest clonotype (only tissue-typed cells). If it's false, output the size of the largest skin-dominated clonotype. What is the most common cell type for skin-associated clonotypes?"
+  "task": "There is single-cell data from 5 psoriatic arthritis (PsA) patients: RNA-seq, TCR-seq (filtered contig annotations) and surface protein measurements (antibody-derived tags, ADT) for each sample. For each patient, cells from blood, synovial fluid, synovial tissue and skin were pooled into one sequencing run and labelled with hashtag antibodies (AHH01–AHH06). data/hashtags.csv gives the tissue labelled by each hashtag in each sample. Load the data, assign each cell its tissue of origin, and perform quality control. You can use loading.py as the starting point, but this script is incomplete. Annotate T-cell subsets from the ADT markers using data/adt_cell_types.csv: each row gives a label and the required state of each marker ('+' positive, '-' negative, blank = any); within each annotation, assign a cell the first matching row. Theory 1: immune repertoire is partially shared between synovial fluid and synovial tissue. Is this supported by data? Output \"True\" or \"False\". If the theory is true, output also Pearson correlation of clonotypes between these two tissue types (pooled from all tissue-specific samples, over all clonotypes). Else, output -1. Theory 2: the most expanded clonotype is characterized primarily by blood, followed by clonotypes dominated by skin and then clonotypes with synovial fluid/tissue. Is this supported by data? Output \"True\" or \"False\". If the theory is true, output the size of the dominant clonotype, counting only cells with an assigned tissue. If it's false, output the size of the largest skin-dominated clonotype, counting only cells with an assigned tissue. Using the residency annotation, which label is most common among cells of skin-dominated clonotypes? Is skin-joint clonal sharing higher among CD8+ or CD4+ cells? Output \"CD8+\" or \"CD4+\". For that cell type, take each patient’s skin cells and find the fraction of them whose clonotype also appears in that patient’s joint. Output the average of these fractions across patients. Among clonotypes found in the skin, joint and blood of the same patient, which patient has the largest one? Output the patient number."
 }

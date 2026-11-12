@@ -5,46 +5,26 @@ import numpy as np
 import pandas as pd
 import scipy.sparse as sp
 
-_PSA_1_3 = {
-  'AHH01': 'blood',
-  'AHH02': 'blood',
-  'AHH03': 'synovial fluid',
-  'AHH04': 'synovial fluid',
-  'AHH06': 'synovial tissue',
-  'AHH05': 'skin',
-}
-
-HASHTAG_TISSUE = {
-  'PSA1': _PSA_1_3,
-  'PSA2': _PSA_1_3,
-  'PSA3a': _PSA_1_3,
-  'PSA3b': _PSA_1_3,
-  'PSA4': {
-    'AHH01': 'blood',
-    'AHH02': 'blood',
-    'AHH03': 'synovial fluid',
-    'AHH04': 'synovial tissue',
-    'AHH05': 'synovial tissue',
-    'AHH06': 'skin',
-  },
-  'PSA5': {
-    'AHH01': 'blood',
-    'AHH02': 'blood',
-    'AHH03': 'synovial fluid',
-    'AHH04': 'synovial fluid',
-    'AHH05': 'synovial tissue',
-    'AHH06': 'synovial tissue',
-  },
-}
-
 HASHTAG_RE = re.compile(r'AHH0[1-6]')
 
 # Expects raw counts that still include the hashtag features, i.e. read with
 # sc.read_10x_mtx(..., gex_only=False) and not yet normalized / log-transformed.
+# `hashtags` maps hashtags to tissues per sample: a DataFrame with columns
+# sample, hashtag, tissue (data/hashtags.csv).
 # Adds obs['hashtag'] (winning hashtag, 'doublet' or 'negative') and obs['tissue']
 # ('doublet' / 'negative' for cells that can't be demultiplexed).
 # A cell is assigned to its top hashtag only if it has >= min_ratio times the counts of the runner-up.
-def annotate_tissue(adata: ad.AnnData, sample_key: str = 'sample', min_ratio: float = 3.0) -> ad.AnnData:
+def annotate_tissue(
+  adata: ad.AnnData,
+  hashtags: pd.DataFrame,
+  sample_key: str = 'sample',
+  min_ratio: float = 3.0,
+) -> ad.AnnData:
+  hashtag_tissue = {
+    sample: dict(zip(group['hashtag'], group['tissue']))
+    for sample, group in hashtags.groupby('sample')
+  }
+
   hto_vars = [v for v in adata.var_names if HASHTAG_RE.search(v)]
   if not hto_vars:
     raise ValueError('No AHH0[1-6] hashtag features found; read the matrix with gex_only=False')
@@ -61,12 +41,12 @@ def annotate_tissue(adata: ad.AnnData, sample_key: str = 'sample', min_ratio: fl
   hashtag = np.where(top == 0, 'negative', hashtag)
 
   samples = adata.obs[sample_key].astype(str).to_numpy()
-  unknown = set(samples) - HASHTAG_TISSUE.keys()
+  unknown = set(samples) - hashtag_tissue.keys()
   if unknown:
     raise ValueError(f'No hashtag mapping for samples: {sorted(unknown)}')
 
   tissue = [
-    HASHTAG_TISSUE[s].get(h, 'unexpected hashtag') if h.startswith('AHH') else h
+    hashtag_tissue[s].get(h, 'unexpected hashtag') if h.startswith('AHH') else h
     for s, h in zip(samples, hashtag.tolist())
   ]
 

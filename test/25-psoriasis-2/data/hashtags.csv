@@ -1,0 +1,37 @@
+sample,hashtag,tissue
+PSA1,AHH01,blood
+PSA1,AHH02,blood
+PSA1,AHH03,synovial fluid
+PSA1,AHH04,synovial fluid
+PSA1,AHH05,skin
+PSA1,AHH06,synovial tissue
+PSA2,AHH01,blood
+PSA2,AHH02,blood
+PSA2,AHH03,synovial fluid
+PSA2,AHH04,synovial fluid
+PSA2,AHH05,skin
+PSA2,AHH06,synovial tissue
+PSA3a,AHH01,blood
+PSA3a,AHH02,blood
+PSA3a,AHH03,synovial fluid
+PSA3a,AHH04,synovial fluid
+PSA3a,AHH05,skin
+PSA3a,AHH06,synovial tissue
+PSA3b,AHH01,blood
+PSA3b,AHH02,blood
+PSA3b,AHH03,synovial fluid
+PSA3b,AHH04,synovial fluid
+PSA3b,AHH05,skin
+PSA3b,AHH06,synovial tissue
+PSA4,AHH01,blood
+PSA4,AHH02,blood
+PSA4,AHH03,synovial fluid
+PSA4,AHH04,synovial tissue
+PSA4,AHH05,synovial tissue
+PSA4,AHH06,skin
+PSA5,AHH01,blood
+PSA5,AHH02,blood
+PSA5,AHH03,synovial fluid
+PSA5,AHH04,synovial fluid
+PSA5,AHH05,synovial tissue
+PSA5,AHH06,synovial tissue
