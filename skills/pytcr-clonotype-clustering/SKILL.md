@@ -1,6 +1,6 @@
 ---
 name: pytcr-clonotype-clustering
-description: Define clonotypes and clonotype clusters from AIRR data using scirpy. Use after pytcr-preprocess. Covers nucleotide-identity clonotype definition, amino-acid similarity clonotype clustering (tcrdist), network layout/visualization, and optional V-gene-constrained clustering.
+description: Define clonotypes and clonotype clusters from AIRR data using scirpy. Use after pytcr-preprocess. Covers nucleotide-identity clonotype definition, amino-acid similarity clonotype clustering (tcrdist, plus which metrics suit BCR data), network layout/visualization, and optional V-gene-constrained clustering.
 ---
 
 # Clonotype Definition and Clustering
@@ -17,9 +17,12 @@ import scirpy as ir
 
 ## Step 1 — Ask the user for two parameters
 
+If the task or user already states the clonotype rule (which chains, nucleotide vs. amino acid, metric, cutoff, how cells with extra chains are handled), use exactly that and skip the questions. These choices change clonotype counts and sizes noticeably, so never substitute a default for a stated rule, and report the parameters you used alongside the results.
+
 **`receptor_arms`** — which chains must match for two cells to be grouped:
 - `"all"` (default if no answer given) — both VJ (e.g. TRA/IGK/IGL) and VDJ (e.g. TRB/IGH) chains must match. Standard paired-chain analysis; precise, but excludes cells with a missing/orphan chain.
-- `"any"` — a match on either arm is enough. Use for frequent chain dropout, epitope-DB queries, or exploratory analysis; more sensitive, but can merge biologically distinct clonotypes.
+- `"any"` — a match on either arm is enough. Use for frequent chain dropout, epitope-DB queries, or exploratory analysis; more sensitive, but can merge biologically distinct clonotypes. With `"any"`, cells that have only a beta (or heavy) chain join clonotypes, so clonotypes come out larger than with `"all"`.
+- `"VJ"` / `"VDJ"` — only that arm is compared. `"VDJ"` (heavy chain only) is a common choice for BCR clustering, since light chains carry little diversity.
 
 **`dual_ir`** — how to treat cells with two receptor pairs (~30% of T cells):
 - `"primary_only"` (recommended for clonotype definition) — only the primary (highest-UMI) pair is used.
@@ -37,6 +40,12 @@ ir.tl.define_clonotypes(mdata, receptor_arms="<receptor_arms>", dual_ir="<dual_i
 ```
 
 Adds `mdata.obs["airr:clone_id"]` (label) and `["airr:clone_id_size"]` (cell count).
+
+> **Pitfall: clonotypes span the whole object.** `define_clonotypes` compares all cells in `mdata`, so identical receptors from different samples or patients share one `clone_id`, and `airr:clone_id_size` counts cells across the whole object. When a question is about clone size per sample, per patient or per tissue, count within that group instead of reading `clone_id_size`:
+> ```python
+> sizes = mdata.obs.groupby(["<patient_col>", "airr:clone_id"], observed=True).size()
+> ```
+> To keep clonotypes from ever spanning patients, run Steps 2–3 on each patient's subset separately.
 
 ```python
 ir.tl.clonotype_network(mdata, min_cells=2)  # raise min_cells to reduce noise in large datasets
@@ -59,6 +68,10 @@ _ = ir.pl.clonotype_network(mdata, color="<color_col>", base_size=20, label_font
 
 Reveals convergent recognition: different clones with similar CDR3s that likely target the same antigen.
 
+> **Pitfall: `tcrdist` is a TCR metric.** It runs on any amino-acid string, but its substitution weights, CDR3 end trimming and gap penalty were calibrated on T-cell receptors, so on B cells its distances and cutoffs are uninformative. B-cell receptors also mutate after selection (somatic hypermutation), and heavy-chain CDR3s vary much more in length. For BCR data, use a metric suited to B cells; the most common are Levenshtein (edit) distance on the CDR3 and normalized Hamming distance among sequences with the same V gene, J gene and CDR3 length (the clonal-lineage convention of tools like Change-O/SCOPer). scirpy's `ir_dist` supports both. If a user explicitly asks for TCRdist on B cells, do it as asked and note that it isn't validated for BCRs.
+
+State the metric, its cutoff and the chains compared with your results: the clusters, and every number computed from them, depend on all three.
+
 ```python
 ir.pp.ir_dist(mdata, metric="tcrdist", sequence="aa", cutoff=15)
 ```
@@ -73,6 +86,8 @@ ir.tl.define_clonotype_clusters(
 ```
 
 Adds `mdata.obs["airr:cc_aa_tcrdist"]` (label) and `["airr:cc_aa_tcrdist_size"]` (cell count).
+
+The cluster column is named `cc_<sequence>_<metric>` (e.g. `cc_aa_tcrdist`). The examples below use `airr:cc_aa_tcrdist`; substitute the column for the metric you used.
 
 ```python
 ir.tl.clonotype_network(mdata, min_cells=3, sequence="aa", metric="tcrdist")

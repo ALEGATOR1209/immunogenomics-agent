@@ -34,6 +34,8 @@ gex.var["hb"] = gex.var_names.str.contains("^HB[^(P)]")
 sc.pp.calculate_qc_metrics(gex, qc_vars=["mt", "ribo", "hb"], inplace=True, log1p=True)
 ```
 
+Check that the mitochondrial flag caught something: `gex.var["mt"].sum()`. Some references name mitochondrial genes without the prefix (e.g. `ND1`, `COX1`, `ATP6`); a prefix filter then matches nothing and a mitochondrial threshold silently removes no cells.
+
 This adds `n_genes_by_counts`, `total_counts`, `pct_counts_mt`, `pct_counts_ribo`, `pct_counts_hb` (and `log1p_*` variants) to `gex.obs`.
 
 ### Inspect
@@ -60,6 +62,8 @@ A permissive filter is recommended at this stage; prefer revisiting stricter thr
 sc.pp.filter_cells(gex, min_genes=100)
 sc.pp.filter_genes(gex, min_cells=3)
 ```
+
+> **Pitfall: per-sample gene filters plus an inner join drop genes.** If samples are filtered separately and then combined with `ad.concat` (default `join="inner"`), only genes that passed the filter in *every* sample survive, which can remove thousands of genes and leave fewer genes than a later HVG step asks for. Filter genes after combining, or combine with `join="outer"`, unless the task specifies per-sample filtering.
 
 Tighter manual/automatic thresholds on `pct_counts_mt` or `total_counts` (based on the plots above) can be applied here instead if the data warrants it — ask the user before removing a large fraction of cells.
 
@@ -90,6 +94,8 @@ sc.pp.normalize_total(gex)
 sc.pp.log1p(gex)
 ```
 
+Without `target_sum`, `normalize_total` scales every cell to the *median* total count. For "normalize to 10,000 counts per cell", pass `target_sum=1e4`.
+
 ## 5. Feature selection (highly variable genes)
 
 Reduce dimensionality to the most informative genes. Replace `<sample_col>` with the batch/sample column if correcting for batch effects:
@@ -98,6 +104,8 @@ Reduce dimensionality to the most informative genes. Replace `<sample_col>` with
 sc.pp.highly_variable_genes(gex, n_top_genes=2000, batch_key="<sample_col>")
 sc.pl.highly_variable_genes(gex)
 ```
+
+The `flavor` decides which genes are picked: `"seurat"` (default) and `"cell_ranger"` work on log-normalized data, `"seurat_v3"` on raw counts (`layer="counts"`). They select different genes, which changes the PCA, the neighbour graph and everything computed on it, so use the flavor the task names. If `n_top_genes` is at least the number of genes, every gene is selected.
 
 > **No-plot alternative:** the same mean-expression-vs-dispersion info as columns instead of a scatter plot.
 > ```python
@@ -117,6 +125,8 @@ mdata.update()
 ## 7. (Optional) Dimensionality Reduction
 
 For user-facing output, cell-type annotation, or downstream clustering, visualize the cellular composition via PCA -> neighbor graph -> UMAP:
+
+Scaling (`sc.pp.scale`) before PCA is a common step but optional, and it changes the PCA and the neighbour graph, and with them clustering, annotation and clonotype modularity. Scale only when the task asks for it or you intend it, and say whether you did.
 
 ```python
 sc.tl.pca(adata)
@@ -151,6 +161,8 @@ sc.pl.umap(adata, color=["leiden"])
 > ```python
 > adata.obs.groupby("leiden")["sample"].value_counts(normalize=True)
 > ```
+
+> **Pitfall: CellTypist majority voting depends on the existing graph.** With `majority_voting=True`, CellTypist over-clusters cells on the neighbour graph already stored in `adata.obsp`, and builds its own (writing it, with `X_pca`, into the object) if there is none. The `majority_voting` labels therefore change with whatever preprocessing ran before it, and they can differ from the per-cell `predicted_labels`. Use the label column the task or script names, and rebuild your own PCA and graph afterwards if CellTypist created them.
 
 ## Post-preprocessing
 

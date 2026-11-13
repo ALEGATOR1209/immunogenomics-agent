@@ -20,7 +20,7 @@ import scirpy as ir
 reference = ir.datasets.iggytop()
 ```
 
-IggyTop is a metadatabase aggregating IEDB, VDJdb, and others, with `antigen_species`/`antigen_name` annotations. Any AnnData in scirpy's format can serve as a reference — build a custom one with `pytcr-data-loading` if the database you need isn't in `scirpy.datasets`.
+IggyTop is a metadatabase aggregating IEDB, VDJdb, and others, with `antigen_species`/`antigen_name` annotations. `iggytop()` downloads the latest release by default, so match counts can change between runs; pass `tag="<release tag>"` when results must be reproducible, and report which release you used. Any AnnData in scirpy's format can serve as a reference — build a custom one with `pytcr-data-loading` if the database you need isn't in `scirpy.datasets`.
 
 ## 2. Compute distances against the reference
 
@@ -73,6 +73,8 @@ ir.tl.ir_query_annotate(
     strategy="most-frequent",
 )
 ```
+
+> **Pitfall: annotation values aren't normalized.** The aggregated sources spell the same thing differently: antigen names can differ only in case, and one species can appear under more than one name. Before counting or comparing antigens, normalize case and check `value_counts()` for synonyms. Also state the denominator of any fraction: all cells, or only cells with a database match (cells without one are `NaN`).
 
 `strategy`: `"unique-only"` (default; cells with multiple inconsistent matches get `"ambiguous"`), `"most-frequent"` (assigns the most common match, ties → `"ambiguous"`), or `"json"` (stores all matches + counts as a JSON string). Adds `mdata.obs["airr:<ref_col>"]` for each column in `include_ref_cols`.
 

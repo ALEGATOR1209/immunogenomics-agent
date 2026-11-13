@@ -35,6 +35,11 @@ ir.tl.clonotype_modularity(mdata, target_col="<cc_col>")
 
 Adds `mdata.obs["airr:clonotype_modularity"]`.
 
+> **Pitfalls:**
+> - **The score depends on the neighbour graph.** Gene filtering, HVG flavor, scaling and the number of neighbours all change it; follow the preprocessing the task states.
+> - **Cells without expression data.** In a MuData whose `airr` modality has cells missing from `gex`, those cells still get a modularity value. Run `mu.pp.intersect_obs(mdata)` first, or average only over cells that have expression data.
+> - **P-values have a floor.** The default `permutation_test="approx"` gives the same smallest FDR to many top clonotypes, so rank by the modularity score, not the p-value. `permutation_test="exact"` gives finer p-values but is slow.
+
 ### 1b. Visualize
 
 On the GEX embedding:
@@ -95,8 +100,8 @@ mu.pl.embedding(
 `sc.tl.rank_genes_groups` doesn't understand `MuData`, so temporarily attach the clonotype column to the GEX `AnnData` with `ir.get.obs_context`:
 
 ```python
-with ir.get.obs_context(mdata["gex"], {"cc_aa_tcrdist": mdata.obs["<cc_col>"]}) as tmp_ad:
-    sc.tl.rank_genes_groups(tmp_ad, "cc_aa_tcrdist", groups=clonotypes_top_modularity, reference="rest", method="wilcoxon")
+with ir.get.obs_context(mdata["gex"], {"cc": mdata.obs["<cc_col>"]}) as tmp_ad:
+    sc.tl.rank_genes_groups(tmp_ad, "cc", groups=clonotypes_top_modularity, reference="rest", method="wilcoxon")
     fig, axs = plt.subplots(1, 2, figsize=(8, 4))
     for ct, ax in zip(clonotypes_top_modularity, axs, strict=False):
         sc.pl.rank_genes_groups_violin(tmp_ad, groups=[ct], n_genes=15, ax=ax, show=False, strip=False)
@@ -108,6 +113,8 @@ with ir.get.obs_context(mdata["gex"], {"cc_aa_tcrdist": mdata.obs["<cc_col>"]}) 
 >     df = sc.get.rank_genes_groups_df(tmp_ad, group=ct)
 >     print(ct, df.head(15))  # or df.set_index("names").loc["<gene>", "logfoldchanges"] for one gene
 > ```
+
+> **Pitfall: `logfoldchanges` isn't the fold change of mean expression.** scanpy computes it as `log2(expm1(mean of log values in group) / expm1(mean of log values in rest))`, which can differ substantially from the ratio of mean normalized expression. Genes are ranked by the test `scores`, not by fold change. If a question asks for the fold change of mean expression, compute it from the normalized, non-log values.
 
 ---
 

@@ -26,7 +26,7 @@ Build chain indices so scirpy can apply its receptor model: separates chains int
 ir.pp.index_chains(mdata)
 ```
 
-Result is stored in `mdata["airr"].obsm["chain_indices"]`.
+Result is stored in `mdata["airr"].obsm["chain_indices"]`. By default only productive chains with a CDR3 amino-acid sequence are indexed (`filter=("productive", "require_junction_aa")`); non-productive contigs are ignored from here on.
 
 ## 2. Chain QC
 
@@ -111,6 +111,12 @@ mu.pp.filter_obs(mdata, "airr:chain_pairing", lambda x: ~np.isin(x, ["orphan VJ"
 
 Apply the chosen option before continuing.
 
+Some analyses go further and keep only `single pair` cells, also dropping cells with an extra chain or two full pairs. This changes clonotype counts and sizes, so if the task states which cells to keep (e.g. "exactly one productive alpha and one productive beta chain"), filter to exactly that:
+
+```python
+mu.pp.filter_obs(mdata, "airr:chain_pairing", lambda x: x == "single pair")
+```
+
 ## 5. Synchronize MuData
 
 After any filtering step, call `.update()` to propagate obs changes across all modalities:
@@ -118,6 +124,8 @@ After any filtering step, call `.update()` to propagate obs changes across all m
 ```python
 mdata.update()
 ```
+
+> **Pitfall: filters propagate across modalities.** `mu.pp.intersect_obs`, or filtering `mdata` on a `gex:` column, also drops receptor cells that failed GEX QC or have no expression barcode. Take counts that describe the receptor data alone (cells, chain pairings, clonotypes) before intersecting, unless the question limits them to cells with expression data.
 
 ## 6. Verify
 
@@ -143,5 +151,5 @@ print(mdata)
 AIRR preprocessing is complete. The natural next step is clonotype analysis:
 
 - **Define clonotypes** (exact nt-sequence identity): `ir.pp.ir_dist` → `ir.tl.define_clonotypes`
-- **Define clonotype clusters** (aa-sequence similarity): `ir.pp.ir_dist(metric="tcrdist")` → `ir.tl.define_clonotype_clusters`
+- **Define clonotype clusters** (aa-sequence similarity): `ir.pp.ir_dist(metric="tcrdist")` → `ir.tl.define_clonotype_clusters` (`tcrdist` is for TCRs; see `pytcr-clonotype-clustering` for BCR data)
 - **Clonal expansion**: `ir.tl.clonal_expansion`
