@@ -54,7 +54,7 @@ not" and "the run was cut off".
 ```
 runs/<task>/<run-id>/eval_result.json
 runs/<task>/<run-id>/outputs/output.json
-runs/<task>/<run-id>/outputs/task.ipynb
+runs/<task>/<run-id>/outputs/<code files>   # task.ipynb in runs before the switch to outputs/; any language after
 runs/<task>/<run-id>/prompt.txt
 runs/<task>/<run-id>/run.jsonl
 runs/<task>/<run-id>/run.txt

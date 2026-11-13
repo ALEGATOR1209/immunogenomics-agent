@@ -197,15 +197,15 @@ MODEL=claude-opus-5
 ```
 
 Each run builds a task image (the agent container + a mamba env with
-scanpy/scirpy), starts a **fresh** container, gives the agent [a base prompt](test/SYSTEM.md), the task
+scanpy/scirpy and an R env with Seurat, scRepertoire, immunarch and Immcantation), starts a **fresh** container, gives the agent [a base prompt](test/SYSTEM.md), the task
 prompt (from the respective `task.json`) plus the required output shape with all values masked. The results is stored in a
-`output.json` that is later graded automatically. Additionally, Jupyter notebook with the completed task is saved. Everything lands
+`outputs/output.json` that is later graded automatically. The agent can work in any language available in the container, but must also save in `outputs/` the code that reproduces its answers. Everything lands
 in `test/<task>/runs/<timestamp>/`:
 
 | File | Contents |
 |---|---|
 | `run.txt` / `run.jsonl` | The agent's thinking, tool calls and output |
-| `outputs/` | The `task.ipynb` and `output.json` it produced |
+| `outputs/` | Everything the agent put in its `outputs/` directory: `output.json` and the code (notebook, script, ...) that produced it |
 | `eval_result.json` | Score, pass/fail, duration, model, and `timed_out` / `interrupted` flags |
 
 Ctrl-C stops the container but still extracts and grades whatever the agent

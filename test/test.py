@@ -50,8 +50,8 @@ docker-agent/README.md).
 --timeout MINUTES: kill the agent's container if it hasn't finished within
     this many minutes (default: 20). A background thread issues
     `docker stop` on the run's container, which (started with --rm) also
-    removes it; whatever task.ipynb/output.json the agent had written by
-    then is still extracted as usual.
+    removes it; whatever the agent had written to outputs/ by then is
+    still extracted as usual.
 
 --n COUNT: repeat the run COUNT times (default: 1), each stored as its own
     run directory under <task-dir>/runs/.
@@ -71,12 +71,18 @@ docker-agent/README.md).
     once, serially, before fanning out.
 
 Ctrl-C (or a TERM) stops the in-flight container the same way a timeout
-does - extracts/grades whatever task.ipynb/output.json exists, marks
+does - extracts/grades whatever the agent wrote to outputs/, marks
 eval_result.json with interrupted: true, skips any remaining --n
 iterations, and exits with status 130.
 
+The agent hands its work in through outputs/ in its working directory
+(test/SYSTEM.md tells it to): the code that reproduces the answers, in any
+language, plus outputs/output.json. After the run that whole directory is
+copied to <run-dir>/outputs/ and outputs/output.json is graded; anything
+the agent left elsewhere in the workspace is discarded.
+
 Optional <task-dir>/starter.ipynb: if present, copied into the writable
-workspace as task.ipynb before the container starts, so the agent begins
+workspace as outputs/task.ipynb before the container starts, so the agent begins
 from a partially-built notebook instead of an empty one - for tasks scoped
 to one pipeline stage that assume an earlier stage's setup already happened.
 Keep it out of data/ (that mount is read-only, so the agent would have to
@@ -174,10 +180,45 @@ RUN /opt/conda/bin/conda config --set channel_priority flexible \\
     && /opt/conda/bin/mamba env create -f /tmp/environment.yml \\
     && /opt/conda/bin/conda clean -afy
 
-# Make the task's conda env (name: pytcr, from environment.yml) the
-# default on PATH for every process in the container, including the
-# bash/python calls pi's agent makes - no `conda activate` needed.
-ENV PATH=/opt/conda/envs/pytcr/bin:$PATH
+# R, in a separate env (name: r, from environment-r.yml) so its solve can't
+# disturb the Python stack above, then the immune-repertoire R packages from
+# CRAN/Bioconductor source (install_r_packages.R fails the build if any is
+# missing). Kept after the Python layer so changing R packages doesn't
+# rebuild the Python env.
+# The R env is ~600 MB of downloads, and conda's CDN has dropped connections
+# mid-transfer while building it (SSL EOFs, a stalled download timing out),
+# failing the whole layer. So: more per-file retries, and up to 3 attempts at
+# the env, removing the half-created env between them; packages already
+# downloaded stay in the package cache, so a retry only fetches what's missing.
+COPY environment-r.yml /tmp/environment-r.yml
+RUN /opt/conda/bin/conda config --set remote_max_retries 10 \\
+    && for attempt in 1 2 3; do \\
+         /opt/conda/bin/mamba env create -y -f /tmp/environment-r.yml && break; \\
+         [ "$attempt" = 3 ] && exit 1; \\
+         echo "R env attempt $attempt failed, retrying"; rm -rf /opt/conda/envs/r; sleep 10; \\
+       done \\
+    && /opt/conda/bin/conda clean -afy
+# duckdb (needed by immunarch, via duckplyr) has no aarch64 conda build, so
+# it's compiled from source - on every architecture, so the images match.
+# It's by far the slowest build (a large C++ library), hence its own layer,
+# cached independently of install_r_packages.R, and MAKEFLAGS to compile it
+# on all cores. `mamba run` activates the env, which is what puts the conda
+# compilers and make on PATH (and sets CC/CXX) for the source builds.
+RUN MAKEFLAGS="-j$(nproc)" /opt/conda/bin/mamba run -n r Rscript -e \\
+      'install.packages("duckdb", repos = "https://cloud.r-project.org"); library(duckdb)'
+COPY install_r_packages.R /tmp/install_r_packages.R
+RUN /opt/conda/bin/mamba run -n r Rscript /tmp/install_r_packages.R
+
+# Register R as a Jupyter kernel in the Python env's Jupyter, so the agent
+# can write R notebooks and execute them with nbconvert like Python ones.
+RUN PATH=/opt/conda/envs/pytcr/bin:$PATH \\
+    /opt/conda/envs/r/bin/Rscript -e 'IRkernel::installspec(user = FALSE, prefix = "/opt/conda/envs/pytcr")'
+
+# Make the task's conda envs the default on PATH for every process in the
+# container, including the bash/python/R calls pi's agent makes - no
+# `conda activate` needed. pytcr comes first, so `python`/`jupyter` resolve
+# there; the r env adds `R`/`Rscript`.
+ENV PATH=/opt/conda/envs/pytcr/bin:/opt/conda/envs/r/bin:$PATH
 """
 
 
@@ -489,13 +530,16 @@ def run_once(task_name, task_dir, task_image, prompt, model, model_server, provi
         if n > 1:
             run_id = f"{run_id}_{iter_num}"
     run_dir = task_dir / "runs" / run_id
-    (run_dir / "workspace").mkdir(parents=True, exist_ok=True)
+    # outputs/ is the only part of the workspace collected after the run
+    # (see SYSTEM.md); created up front so it exists even if the agent
+    # never makes it.
+    (run_dir / "workspace" / "outputs").mkdir(parents=True, exist_ok=True)
     (run_dir / "prompt.txt").write_text(prompt)
 
     starter_notebook = task_dir / "starter.ipynb"
     if starter_notebook.exists():
-        shutil.copy(starter_notebook, run_dir / "workspace" / "task.ipynb")
-        log(f"Pre-seeded task.ipynb from {starter_notebook}")
+        shutil.copy(starter_notebook, run_dir / "workspace" / "outputs" / "task.ipynb")
+        log(f"Pre-seeded outputs/task.ipynb from {starter_notebook}")
 
     container_name = f"pytcr-test-{task_name}-{run_id}"
     log(f"Starting container: {container_name} (model: {model}, timeout: {timeout_min}m)")
@@ -579,17 +623,31 @@ def run_once(task_name, task_dir, task_image, prompt, model, model_server, provi
         f.write(f"=== Container exit status: {run_status} ===\n")
         f.write(f"=== Duration: {duration_s}s ===\n")
 
+    # Collect everything the agent put in outputs/: the answers plus the
+    # code that produced them, in whatever language it chose. symlinks=True
+    # copies links as links, so a link the agent made to something outside
+    # the workspace (e.g. into data/) isn't followed and duplicated.
     outputs_dir = run_dir / "outputs"
+    agent_outputs = run_dir / "workspace" / "outputs"
+    if agent_outputs.is_dir():
+        shutil.copytree(agent_outputs, outputs_dir, symlinks=True, dirs_exist_ok=True)
     outputs_dir.mkdir(exist_ok=True)
-    for fname in ("task.ipynb", "output.json"):
-        src = run_dir / "workspace" / fname
-        if src.exists():
-            shutil.copy(src, outputs_dir / fname)
-        else:
-            msg = f"WARNING: {fname} was not produced"
-            print(msg)
-            with open(pretty_file, "a") as f:
-                f.write(msg + "\n")
+    # os.walk rather than rglob: it never descends into symlinked
+    # directories, so a link to data/ lists as one entry, not every file.
+    output_files = sorted(
+        str((Path(root) / name).relative_to(outputs_dir))
+        for root, dirs, files in os.walk(outputs_dir)
+        for name in files + [d for d in dirs if (Path(root) / d).is_symlink()]
+    )
+    missing = []
+    if not (outputs_dir / "output.json").exists():
+        missing.append("WARNING: outputs/output.json was not produced")
+    if not any(f != "output.json" for f in output_files):
+        missing.append("WARNING: no code was saved in outputs/")
+    for msg in missing:
+        print(msg)
+        with open(pretty_file, "a") as f:
+            f.write(msg + "\n")
     try:
         shutil.rmtree(run_dir / "workspace")
     except OSError as e:
@@ -608,6 +666,7 @@ def run_once(task_name, task_dir, task_image, prompt, model, model_server, provi
     eval_data["model"] = model
     eval_data["harness"] = "pi"
     eval_data["model_server"] = model_server
+    eval_data["output_files"] = output_files
     eval_file.write_text(json.dumps(eval_data, indent=2))
 
     eval_block = f"=== Evaluation ===\n{eval_file.read_text()}\n"

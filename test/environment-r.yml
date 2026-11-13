@@ -1,0 +1,71 @@
+# R side of the task container, kept in its own env (name: r) so its solve
+# can't disturb the Python scanpy/scirpy stack in environment.yml. Both envs
+# are on PATH in the container; see DOCKERFILE_TEMPLATE in test.py.
+#
+# Only packages conda-forge/bioconda build for BOTH linux-64 and
+# linux-aarch64 are listed here, so the image is the same on the x86 WSL box
+# and on Apple-silicon Docker. The immune-repertoire packages themselves
+# (scRepertoire, Immcantation) are installed from CRAN/Bioconductor source by
+# install_r_packages.R: conda's builds are years behind CRAN (alakazam 1.2 vs
+# scoper's alakazam>=1.5 requirement) and scoper has no aarch64 build at all.
+# The compilers below are for those source builds. immunarch is installed
+# the same way; its duckdb dependency has no aarch64 conda build, so the
+# Dockerfile compiles duckdb from source in its own layer first.
+name: r
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - r-base=4.5
+  - r-irkernel
+  - r-biocmanager
+  - r-remotes
+  - r-tidyverse
+  - r-data.table
+  - r-matrix
+  - r-seurat
+  - r-hdf5r
+  - r-stringdist
+  - r-igraph
+  - r-ape
+  - r-circlize
+  - r-pheatmap
+  - bioconductor-singlecellexperiment
+  - bioconductor-scater
+  - bioconductor-singler
+  # dependencies of the source-installed packages, pulled from conda so they
+  # don't have to compile. Not r-inext: conda-forge ships it as a noarch
+  # build without its compiled iNEXT.so, which breaks loading scRepertoire;
+  # BiocManager builds it from source instead.
+  - r-airr
+  - r-ggalluvial
+  - r-ggdendro
+  - r-vgam
+  - r-quantreg
+  - r-hash
+  - r-fastcluster
+  - r-doparallel
+  - r-diptest
+  - r-progress
+  - r-ade4
+  - r-seqinr
+  - r-segmented
+  - r-pixmap
+  - bioconductor-biostrings
+  - bioconductor-genomicalignments
+  - r-gsl
+  - r-ggforce
+  - r-ggraph
+  - r-tidygraph
+  - r-graphlayouts
+  - r-tweenr
+  - r-rjson
+  - r-evmix
+  - r-dbplyr
+  - r-dtplyr
+  - r-rlist
+  - r-checkmate
+  - c-compiler
+  - cxx-compiler
+  - fortran-compiler
+  - make
