@@ -11,5 +11,7 @@ def annotate_cells(mdata: mu.MuData) -> mu.MuData:
     majority_voting=True,
   ).to_adata()
 
+  gex.obs['cell_type'] = gex.obs['predicted_labels']
+
   mdata.update()
   return mdata

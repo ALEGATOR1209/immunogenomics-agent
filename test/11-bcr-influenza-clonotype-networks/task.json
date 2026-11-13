@@ -62,7 +62,7 @@
         "largest_clones_cell_types": {
           "type": "list_overlap"
         },
-        "convergent_clonotype_change_rate": {
+        "cluster_fraction_ratio": {
           "type": "absolute",
           "value": 0.5
         }
